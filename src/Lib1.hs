@@ -8,7 +8,10 @@ module Lib1
   )
 where
 
-import DataFrame (DataFrame)
+-- Note(Almantas Mecele): Yes, this is modifying code outside of the allowed area.
+-- I don't see why importing more from the DataFrame module would be a bad idea;
+--import DataFrame (DataFrame)
+import DataFrame (DataFrame (..), Column (..), Row(..), ColumnType (..), Value (..))
 import InMemoryTables (TableName)
 
 type ErrorMessage = String
@@ -17,25 +20,103 @@ type Database = [(TableName, DataFrame)]
 
 -- Your code modifications go below this comment
 
+toLower :: Char -> Char
+toLower ch
+    | elem ch ['A'..'Z'] = toEnum $ fromEnum ch + 32
+    | otherwise = ch
+
+toLowerStr :: [Char] -> [Char]
+toLowerStr str = [toLower ch | ch <- str]
+
+validType :: (Column, Value) -> Bool
+validType ((Column _ IntegerType), (IntegerValue _)) = True
+validType ((Column _ StringType), (StringValue _)) = True
+validType ((Column _ BoolType), (BoolValue _)) = True
+validType (_, (NullValue)) = True
+validType (_, _) = False
+
 -- 1) implement the function which returns a data frame by its name
 -- in provided Database list
+-- Credit: Almantas Mecele
 findTableByName :: Database -> String -> Maybe DataFrame
-findTableByName [] _ = Nothing
-findTableByName ((a, b) : xs) name = if name == a then Just b else findTableByName xs name
+findTableByName database tableName = lookup (toLowerStr tableName) database
 
 -- 2) implement the function which parses a "select * from ..."
 -- sql statement and extracts a table name from the statement
+-- Credit: Almantas Mecele
 parseSelectAllStatement :: String -> Either ErrorMessage TableName
-parseSelectAllStatement _ = error "parseSelectAllStatement not implemented"
+parseSelectAllStatement inputStr
+    | length truncSplitStr < 4 = Left "too short of a query"
+    | truncSplitStr !! 0 /= "select" = Left "first word not 'select'"
+    | truncSplitStr !! 1 /= "*" = Left "column selection not a wild card"
+    | truncSplitStr !! 2 /= "from" = Left "third word not 'from'"
+    | otherwise = Right $ unwords $ drop 3 truncSplitStr
+    where
+        truncSplitStr = words $ takeWhile (/= ';') $ toLowerStr inputStr
 
 -- 3) implement the function which validates tables: checks if
 -- columns match value types, if rows sizes match columns,..
+-- Credit: Almantas Mecele
 validateDataFrame :: DataFrame -> Either ErrorMessage ()
-validateDataFrame _ = error "validateDataFrame ot implemented"
+validateDataFrame (DataFrame cols rows)
+    | any (\row -> length row /= colLength) rows = Left "column count and row length mismatch"
+    | any (\row -> any (\zipped -> not $ validType zipped) (zip cols row)) rows = Left "column type and row value mismatch"
+    | otherwise = Right ()
+    where
+        colLength :: Int
+        colLength = length cols
 
 -- 4) implement the function which renders a given data frame
 -- as ascii-art table (use your imagination, there is no "correct"
 -- answer for this task!), it should respect terminal
 -- width (in chars, provided as the first argument)
 renderDataFrameAsTable :: Integer -> DataFrame -> String
-renderDataFrameAsTable _ _ = error "renderDataFrameAsTable not implemented"
+renderDataFrameAsTable terminalWidth (DataFrame columns rows)
+  = unlines $ headerRow : separatorRow : dataRows
+  where
+    columnWidths = map (maximum . map valueWidth) (transposeValueRows columns rows)
+    separatorRow = separatorLine columnWidths
+    headerRow = renderRow (map columnName columns) columnWidths
+    dataRows = map (renderRowWithValues columnWidths) rows
+
+    transposeValueRows :: [Column] -> [Row] -> [[Value]]
+    transposeValueRows columns' rows' =
+      [ [row !! i | row <- rows'] | i <- [0..length columns' - 1] ]
+
+    valueWidth :: Value -> Int
+    valueWidth NullValue = 4
+    valueWidth (IntegerValue x) = length (show x)
+    valueWidth (StringValue s) = length s
+    valueWidth (BoolValue True) = 4
+    valueWidth (BoolValue False) = 5
+
+    separatorLine :: [Int] -> String
+    separatorLine widths = "+-" ++ concatMap (`replicate` '-') widths' ++ "-+"
+      where
+        widths' = map (\w -> w + 2) widths
+
+    renderRow :: [String] -> [Int] -> String
+    renderRow columns' widths =
+      "| " ++ renderRowValues columns' widths ++ " |"
+
+    renderRowWithValues :: [Int] -> Row -> String
+    renderRowWithValues widths row =
+      "| " ++ renderRowValues (map showValue row) widths ++ " |"
+
+    renderRowValues :: [String] -> [Int] -> String
+    renderRowValues [] [] = ""
+    renderRowValues (col:cols) (w:ws) =
+      padValue col w ++ " | " ++ renderRowValues cols ws
+
+    columnName :: Column -> String
+    columnName (Column name _) = name
+
+    showValue :: Value -> String
+    showValue NullValue = "null"
+    showValue (IntegerValue x) = show x
+    showValue (StringValue s) = s
+    showValue (BoolValue True) = "True"
+    showValue (BoolValue False) = "False"
+
+    padValue :: String -> Int -> String
+    padValue value width = take width (value ++ repeat ' ')
