@@ -28,13 +28,6 @@ toLower ch
 toLowerStr :: [Char] -> [Char]
 toLowerStr str = [toLower ch | ch <- str]
 
-validType :: (Column, Value) -> Bool
-validType ((Column _ IntegerType), (IntegerValue _)) = True
-validType ((Column _ StringType), (StringValue _)) = True
-validType ((Column _ BoolType), (BoolValue _)) = True
-validType (_, (NullValue)) = True
-validType (_, _) = False
-
 -- 1) implement the function which returns a data frame by its name
 -- in provided Database list
 -- Credit: Almantas Mecele
@@ -52,7 +45,7 @@ parseSelectAllStatement inputStr
     | truncSplitStr !! 2 /= "from" = Left "third word not 'from'"
     | otherwise = Right $ unwords $ drop 3 truncSplitStr
     where
-        truncSplitStr = words $ takeWhile (/= ';') $ toLowerStr inputStr
+        truncSplitStr = words $ toLowerStr $ takeWhile (/= ';') inputStr
 
 -- 3) implement the function which validates tables: checks if
 -- columns match value types, if rows sizes match columns,..
@@ -60,11 +53,17 @@ parseSelectAllStatement inputStr
 validateDataFrame :: DataFrame -> Either ErrorMessage ()
 validateDataFrame (DataFrame cols rows)
     | any (\row -> length row /= colLength) rows = Left "column count and row length mismatch"
-    | any (\row -> any (\zipped -> not $ validType zipped) (zip cols row)) rows = Left "column type and row value mismatch"
+    | any (\row -> any (\zipped -> not $ compatibleType zipped) (zip cols row)) rows = Left "column type and row value mismatch"
     | otherwise = Right ()
     where
         colLength :: Int
         colLength = length cols
+        compatibleType :: (Column, Value) -> Bool
+        compatibleType ((Column _ IntegerType), (IntegerValue _)) = True
+        compatibleType ((Column _ StringType), (StringValue _)) = True
+        compatibleType ((Column _ BoolType), (BoolValue _)) = True
+        compatibleType (_, (NullValue)) = True
+        compatibleType (_, _) = False
 
 -- 4) implement the function which renders a given data frame
 -- as ascii-art table (use your imagination, there is no "correct"
@@ -102,7 +101,6 @@ renderDataFrameAsTable givenTerminalWidth (DataFrame columns rows)
     
     valueWidth :: Value -> Int
     valueWidth val = length $ showValue val
-
     
     getValues :: [Column] -> [Row] -> [[Value]]
     getValues columns' rows' = map (\i -> map (\row -> row !! i) rows') [0..(length columns' - 1)] -- transpose matrix, so [Value] is column of values
