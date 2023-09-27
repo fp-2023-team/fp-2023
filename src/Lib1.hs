@@ -28,43 +28,39 @@ toLower ch
 toLowerStr :: [Char] -> [Char]
 toLowerStr str = [toLower ch | ch <- str]
 
-validType :: (Column, Value) -> Bool
-validType ((Column _ IntegerType), (IntegerValue _)) = True
-validType ((Column _ StringType), (StringValue _)) = True
-validType ((Column _ BoolType), (BoolValue _)) = True
-validType (_, (NullValue)) = True
-validType (_, _) = False
-
 -- 1) implement the function which returns a data frame by its name
 -- in provided Database list
--- Credit: Almantas Mecele
 findTableByName :: Database -> String -> Maybe DataFrame
 findTableByName database tableName = lookup (toLowerStr tableName) database
 
 -- 2) implement the function which parses a "select * from ..."
 -- sql statement and extracts a table name from the statement
--- Credit: Almantas Mecele
 parseSelectAllStatement :: String -> Either ErrorMessage TableName
 parseSelectAllStatement inputStr
     | length truncSplitStr < 4 = Left "too short of a query"
     | truncSplitStr !! 0 /= "select" = Left "first word not 'select'"
     | truncSplitStr !! 1 /= "*" = Left "column selection not a wild card"
     | truncSplitStr !! 2 /= "from" = Left "third word not 'from'"
-    | otherwise = Right $ unwords $ drop 3 truncSplitStr
+    | otherwise = Right $ unwords $ truncSplitStr !! 3
     where
-        truncSplitStr = words $ takeWhile (/= ';') $ toLowerStr inputStr
+        truncSplitStr = words $ toLowerStr $ takeWhile (/= ';') inputStr
 
 -- 3) implement the function which validates tables: checks if
 -- columns match value types, if rows sizes match columns,..
--- Credit: Almantas Mecele
 validateDataFrame :: DataFrame -> Either ErrorMessage ()
 validateDataFrame (DataFrame cols rows)
     | any (\row -> length row /= colLength) rows = Left "column count and row length mismatch"
-    | any (\row -> any (\zipped -> not $ validType zipped) (zip cols row)) rows = Left "column type and row value mismatch"
+    | any (\row -> any (\zipped -> not $ compatibleType zipped) (zip cols row)) rows = Left "column type and row value mismatch"
     | otherwise = Right ()
     where
         colLength :: Int
         colLength = length cols
+        compatibleType :: (Column, Value) -> Bool
+        compatibleType ((Column _ IntegerType), (IntegerValue _)) = True
+        compatibleType ((Column _ StringType), (StringValue _)) = True
+        compatibleType ((Column _ BoolType), (BoolValue _)) = True
+        compatibleType (_, (NullValue)) = True
+        compatibleType (_, _) = False
 
 -- 4) implement the function which renders a given data frame
 -- as ascii-art table (use your imagination, there is no "correct"
