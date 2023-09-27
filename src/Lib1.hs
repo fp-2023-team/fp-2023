@@ -11,7 +11,7 @@ where
 -- Note(Almantas Mecele): Yes, this is modifying code outside of the allowed area.
 -- I don't see why importing more from the DataFrame module would be a bad idea;
 --import DataFrame (DataFrame)
-import DataFrame (DataFrame (..), Column (..), Row(..), ColumnType (..), Value (..))
+import DataFrame (DataFrame (..), Column (..), Row, ColumnType (..), Value (..))
 import InMemoryTables (TableName)
 
 type ErrorMessage = String
@@ -41,7 +41,7 @@ parseSelectAllStatement inputStr
     | truncSplitStr !! 0 /= "select" = Left "first word not 'select'"
     | truncSplitStr !! 1 /= "*" = Left "column selection not a wild card"
     | truncSplitStr !! 2 /= "from" = Left "third word not 'from'"
-    | otherwise = Right $ unwords $ truncSplitStr !! 3
+    | otherwise = Right $ unwords $ drop 3 truncSplitStr
     where
         truncSplitStr = words $ toLowerStr $ takeWhile (/= ';') inputStr
 
