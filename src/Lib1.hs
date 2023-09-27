@@ -11,7 +11,7 @@ where
 -- Note(Almantas Mecele): Yes, this is modifying code outside of the allowed area.
 -- I don't see why importing more from the DataFrame module would be a bad idea;
 --import DataFrame (DataFrame)
-import DataFrame (DataFrame (..), Column (..), Row(..), ColumnType (..), Value (..))
+import DataFrame
 import InMemoryTables (TableName)
 
 type ErrorMessage = String
@@ -71,52 +71,69 @@ validateDataFrame (DataFrame cols rows)
 -- answer for this task!), it should respect terminal
 -- width (in chars, provided as the first argument)
 renderDataFrameAsTable :: Integer -> DataFrame -> String
-renderDataFrameAsTable terminalWidth (DataFrame columns rows)
+renderDataFrameAsTable givenTerminalWidth (DataFrame columns rows)
   = unlines $ headerRow : separatorRow : dataRows
   where
-    columnWidths = map (maximum . map valueWidth) (transposeValueRows columns rows)
-    separatorRow = separatorLine columnWidths
-    headerRow = renderRow (map columnName columns) columnWidths
-    dataRows = map (renderRowWithValues columnWidths) rows
+    minimumTerminalWidth = 20
+    maximumTerminalWidth = 120
+    terminalWidth :: Int
+    terminalWidth = min maximumTerminalWidth $ max minimumTerminalWidth (fromInteger givenTerminalWidth)  -- tructates and adds ... if sum of column widths exeeds it.
+    -- Column represented by [Value] maps into widths and takes it maximum. Maps [[Value]] Calumns into [Int] widthMaximums.
+    columnWidths = reduceWidths unboundColumnWidths
+      where 
+        unboundColumnWidths = map (\((Column name _), width) -> max (length name) width ) $ zip columns (map (maximum . map valueWidth) (getValues columns rows))
+        reduceWidths :: [Int] -> [Int]
+        reduceWidths widths
+            | sum widths <= terminalWidth = widths
+            | otherwise = map (\width -> if width > average then average else width) widths
+        average = terminalWidth `div` (length columns)
+    
 
-    transposeValueRows :: [Column] -> [Row] -> [[Value]]
-    transposeValueRows columns' rows' =
-      [ [row !! i | row <- rows'] | i <- [0..length columns' - 1] ]
-
-    valueWidth :: Value -> Int
-    valueWidth NullValue = 4
-    valueWidth (IntegerValue x) = length (show x)
-    valueWidth (StringValue s) = length s
-    valueWidth (BoolValue True) = 4
-    valueWidth (BoolValue False) = 5
-
-    separatorLine :: [Int] -> String
-    separatorLine widths = "+-" ++ concatMap (`replicate` '-') widths' ++ "-+"
-      where
-        widths' = map (\w -> w + 2) widths
-
-    renderRow :: [String] -> [Int] -> String
-    renderRow columns' widths =
-      "| " ++ renderRowValues columns' widths ++ " |"
-
-    renderRowWithValues :: [Int] -> Row -> String
-    renderRowWithValues widths row =
-      "| " ++ renderRowValues (map showValue row) widths ++ " |"
-
-    renderRowValues :: [String] -> [Int] -> String
-    renderRowValues [] [] = ""
-    renderRowValues (col:cols) (w:ws) =
-      padValue col w ++ " | " ++ renderRowValues cols ws
-
-    columnName :: Column -> String
-    columnName (Column name _) = name
+    headerRow = renderRow $ map (\(column, width) -> renderColumnValue column width) (zip columns columnWidths)
+    separatorRow = separatorLine columnWidths 
+    dataRows = map renderRow $ map (\row -> map (\(value, width) -> renderRowValue value width) (zip row columnWidths) ) rows
 
     showValue :: Value -> String
-    showValue NullValue = "null"
-    showValue (IntegerValue x) = show x
-    showValue (StringValue s) = s
+    showValue (IntegerValue i) = show i
+    showValue (StringValue str) = str
     showValue (BoolValue True) = "True"
     showValue (BoolValue False) = "False"
+    showValue (NullValue) = "null"
+    
+    valueWidth :: Value -> Int
+    valueWidth val = length $ showValue val
 
-    padValue :: String -> Int -> String
-    padValue value width = take width (value ++ repeat ' ')
+    
+    getValues :: [Column] -> [Row] -> [[Value]]
+    getValues columns' rows' = map (\i -> map (\row -> row !! i) rows') [0..(length columns' - 1)] -- transpose matrix, so [Value] is column of values
+    
+    separatorLine :: [Int] -> String
+    separatorLine widths = (foldl (\acc str -> acc ++ str) "" $ map (\width -> (widthToLine $ width + 2) ++ "+") $ init widths) ++ (widthToLine $ (last widths) + 2)
+      where widthToLine width = take width $ repeat '-'
+    
+
+    renderRow :: [String] -> String
+    renderRow rowValues = (foldl (\acc str -> acc ++ " " ++ str ++ " |" ) "" $ init rowValues) ++ " " ++ last rowValues
+    
+
+    renderRowValue :: Value -> Int -> String
+    renderRowValue val width = padAlignLeft (reduceValue (showValue val) width) width
+
+    renderColumnValue :: Column -> Int -> String
+    renderColumnValue (Column name _) width = padAlignCenter (reduceValue name width) width
+
+    reduceValue :: String -> Int -> String
+    reduceValue str width
+      | length str > width = (take (width-2) str) ++ ".."
+      | otherwise = str
+    
+
+    padAlignLeft :: String -> Int -> String
+    padAlignLeft str width = str ++ (take (width - (length str)) $ repeat ' ') 
+
+    padAlignCenter :: String -> Int -> String
+    padAlignCenter str width =
+      let padding = width - length str
+          leftPadding = padding `div` 2
+          rightPadding = padding - leftPadding
+      in replicate leftPadding ' ' ++ str ++ replicate rightPadding ' '
