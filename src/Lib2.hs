@@ -19,7 +19,29 @@ data ParsedStatement = ParsedStatement
 -- Parses user input into an entity representing a parsed
 -- statement
 parseStatement :: String -> Either ErrorMessage ParsedStatement
-parseStatement a = if(parseCompare (parseWord a) "select" || parseCompare (parseWord a) "show") then Left "Greaghcit" else Left "Bad"
+parseStatement a = parseStatementList $ parsePhrase a
+  where 
+    parseStatementList :: [String] -> Either ErrorMessage ParsedStatement
+    parseStatementList [] = Left "Bad"
+    parseStatementList (x:xs) = 
+      if(parseCompare x "select") 
+        then Left "Parse Select not implemented"--parseSelect xs  
+        else if(parseCompare x "show")
+          then parseShow xs 
+          else Left "Keyword unrecognised"
+    
+parseShow :: [String] -> Either ErrorMessage ParsedStatement
+parseShow [] = Left "Show statement incomplete"
+parseShow (x:xs) =
+  if(parseCompare x "tables")
+    then Left "Show tables statement not implemented" -- TODO: add SHOW TABLES to parsed statement
+    else if(parseCompare x "table")
+      then parseTableName xs
+      else Left "Unrecognised show command"
+
+parseTableName :: [String] -> Either ErrorMessage ParsedStatement
+parseTableName [a] = Left "Parse table name not implemented" --TODO: add SHOW TABLE <name> to parsed statement
+parseTableName _ = Left "Incorrect table name input"
 
 parsePhrase :: String -> [String]
 parsePhrase [] = []
