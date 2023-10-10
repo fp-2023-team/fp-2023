@@ -19,8 +19,16 @@ data ParsedStatement = ParsedStatement
 -- Parses user input into an entity representing a parsed
 -- statement
 parseStatement :: String -> Either ErrorMessage ParsedStatement
-parseStatement a = if(parseCompare a "select") then Left "Great" else Left "Bad"
-     
+parseStatement a = if(parseCompare (parseWord a) "select" || parseCompare (parseWord a) "show") then Left "Greaghcit" else Left "Bad"
+
+parsePhrase :: String -> [String]
+parsePhrase [] = []
+parsePhrase stringy = (parseWord stringy) : parsePhrase(removeWord stringy)
+
+removeWord :: String -> String
+removeWord [] = []
+removeWord (x:xs) = if (x == ' ') then xs else removeWord xs
+
 parseCompare :: String -> String -> Bool
 parseCompare [] [] = True
 parseCompare (x:xs) (a:ab) = if (toLower(x) == toLower(a)) then parseCompare xs ab else False
@@ -30,6 +38,10 @@ parseCompare (x:xs) (a:ab) = if (toLower(x) == toLower(a)) then parseCompare xs 
         | elem ch ['A'..'Z'] = toEnum $ fromEnum ch + 32
         | otherwise = ch
 parseCompare _ _ = False
+
+parseWord :: String -> String
+parseWord [] = ""
+parseWord (a:xs) = if (a == ' ') then "" else a : parseWord xs
 
 -- Executes a parsed statemet. Produces a DataFrame. Uses
 -- InMemoryTables.databases a source of data.
