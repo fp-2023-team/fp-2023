@@ -14,12 +14,34 @@ type ErrorMessage = String
 type Database = [(TableName, DataFrame)]
 
 -- Keep the type, modify constructors
-data ParsedStatement = ParsedStatement
+data Value
+  = IntegerValue Integer
+  | StringValue String
+  | BoolValue Bool
+  | NullValue
+  deriving (Show, Eq)
+
+-- Keep the type, modify constructors
+data ParsedStatement = SelectStatement {
+        -- Either single max(column_name), sum(column_name) or list of column names
+        selectArgs :: Either (String, [Value] -> Value) [String],
+        -- Table names
+        -- TODO: ask the lecturer whether onr not there may be multiple tables
+        fromArgs :: [String],
+        -- All 'where' args are column_name0 ?=? column_name1 ORed
+        -- TODO: ask the lecturer whether there will be ()
+        whereArgs :: [(String, String, Value -> Value -> Bool)]
+    }
+    | ShowTableStatement {
+        -- Either TABLES or TABLE name[, ...]
+        showTableArgs :: Maybe [String]
+    }
+
 
 -- Parses user input into an entity representing a parsed
 -- statement
 parseStatement :: String -> Either ErrorMessage ParsedStatement
-parseStatement a = parseStatementList $ parsePhrase a
+parseStatement a = parseStatementList $ parsePhrase $ parseEndSemicolon a
   where 
     parseStatementList :: [String] -> Either ErrorMessage ParsedStatement
     parseStatementList [] = Left "Bad"
@@ -29,19 +51,43 @@ parseStatement a = parseStatementList $ parsePhrase a
         else if(parseCompare x "show")
           then parseShow xs 
           else Left "Keyword unrecognised"
-    
+
+--parseSelect :: [String] -> Either ErrorMessage ParsedStatement
+--parseSelect [] = Left "Error: incomplete select statement"
+--parseSelect x = 
+
 parseShow :: [String] -> Either ErrorMessage ParsedStatement
 parseShow [] = Left "Show statement incomplete"
 parseShow (x:xs) =
   if(parseCompare x "tables")
-    then Left "Show tables statement not implemented" -- TODO: add SHOW TABLES to parsed statement
+    then Right ShowTableStatement { showTableArgs = Nothing }
     else if(parseCompare x "table")
       then parseTableName xs
       else Left "Unrecognised show command"
 
 parseTableName :: [String] -> Either ErrorMessage ParsedStatement
-parseTableName [a] = Left "Parse table name not implemented" --TODO: add SHOW TABLE <name> to parsed statement
+parseTableName (a : _) = Right ShowTableStatement { showTableArgs = Just [(parseCommas [a]) !! 0]}
 parseTableName _ = Left "Incorrect table name input"
+
+parseCommas :: [String] -> [String]
+parseCommas [] = []
+parseCommas [x] = parseCommaPhrase x
+parseCommas (x : xs) = (parseCommaPhrase x) ++ (parseCommas xs)
+
+parseCommaPhrase :: String -> [String]
+parseCommaPhrase x = removeEmpty $ parsePhrase $ parseComma x
+  where
+    removeEmpty :: [String] -> [String]
+    removeEmpty [] = []
+    removeEmpty (x : xs) = if (x == "") then removeEmpty xs else x : removeEmpty xs
+
+parseComma :: String -> String
+parseComma [] = []
+parseComma (x : xs) = if (x == ',') then ' ' : (parseComma xs) else x : (parseComma xs)
+
+parseEndSemicolon :: String -> String
+parseEndSemicolon [] = ""
+parseEndSemicolon (x:xs) = if (x == ';') then "" else x : parseEndSemicolon xs
 
 parsePhrase :: String -> [String]
 parsePhrase [] = []
