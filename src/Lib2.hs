@@ -63,13 +63,10 @@ moreOrEqual a b = False
 -- Parses user input into an entity representing a parsed
 -- statement
 parseStatement :: String -> Either ErrorMessage ParsedStatement
---parseStatement a = parseStatementList $ removeEmpty $ parsePhrase $ parseEndSemicolon a
 parseStatement a = parseStatementList $ parseEndSemicolon a
   where 
-    --parseStatementList :: [String] -> Either ErrorMessage ParsedStatement
     parseStatementList :: String -> Either ErrorMessage ParsedStatement
-    parseStatementList [] = Left "No statement found"
-    --parseStatementList (x:xs) = 
+    parseStatementList [] = Left "No statement found" 
     parseStatementList a = case (parseKeyword a) of
       Left e -> Left e
       Right (x, xs) -> if(parseCompare x "select") 
@@ -87,26 +84,6 @@ parseKeyword a = if (isTerminating (trpl2 parseResult))
 isTerminating :: Char -> Bool
 isTerminating a | elem a "(),=<>" = True
 isTerminating _ = False
---parseArgs :: String -> Either ErrorMessage ([String], String)
---parseArgs a = case (parseWord a)  of
---  (args, ';', rem) -> Right ([args], rem)
---  (args, ' ', rem) -> Right ([args], rem)
---  (args, ',', rem) -> 
---  (args, '(', rem) ->
---  (args, '=', rem) ->
-  --if (trpl2 parseResult == ','|| trpl2 parseResult == '(')
-  --then Left $ "Unexpected " ++ [(trpl2 parseResult)] ++ " after " ++ (trpl1 parseResult)
-  --else Right (trpl1 parseResult, trpl3 parseResult)   
-  --where parseResult = parseWord a
-
---parseTillCommaOrEnd :: String -> Either ErrorMessage (String, String)
---parseTillCommaOrEnd [] = ([], [])
-
---parseKeyword :: String -> Either ErrorMessage (String, String)
---parseKeyword a = if (trpl2 parseResult == ';' || trpl2 parseResult == ','|| trpl2 parseResult == '(')
---  then Left $ "Unexpected " ++ [(trpl2 parseResult)] ++ " after " ++ (trpl1 parseResult)
---  else Right (trpl1 parseResult, trpl3 parseResult)   
---  where parseResult = parseWord a
 
 parseSelect :: String -> Either ErrorMessage ParsedStatement
 parseSelect [] = Left "Incomplete select statement"
@@ -115,7 +92,6 @@ parseSelect x = parseWhereArgs $ parseFromArgs $ parseSelectArgs x
     parseSelectArgs :: String -> Either ErrorMessage (String, ParsedStatement)
     parseSelectArgs [] = Left "Reached unknown state"
     parseSelectArgs a = case (parseWord a) of
-      --(x, '=', _) | (x, '<', _) | (x, '>', _) | (x, ')', _) -> Left $ "Unexpected symbol after " ++ x
       (x, sym, _) | elem sym "=<>)" -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
       (_, ';', _) -> Left "Missing from statememnt"
       (x, ' ', xs) -> Right (xs, SelectStatement { selectArgs = [Right x]})
@@ -140,13 +116,6 @@ parseSelect x = parseWhereArgs $ parseFromArgs $ parseSelectArgs x
     getTermination (' ':xs) = getTermination xs
     getTermination (x:xs) | elem x ",<>=()" = x
     getTermination (_:xs) = ' '
-    --parseSelectArgs [a] = Left "Missing from statement"
-    --parseSelectArgs (x:xs) = if(checkComma x) 
-    --  then case (parseSelectArgs xs) of
-    --    Left e -> Left e
-    --    Right statement -> Right (fst (statement), SelectStatement { selectArgs = ((parseComma x) : (selectArgs (snd statement))) })  
-    --  else Right (xs, SelectStatement { selectArgs = [x] })
-    --parseSelectArgs _ = Left "Reached unknown state"
 
     parseFromArgs :: Either ErrorMessage (String, ParsedStatement) -> Either ErrorMessage (String, ParsedStatement)
     parseFromArgs (Left e) = Left e
@@ -154,25 +123,9 @@ parseSelect x = parseWhereArgs $ parseFromArgs $ parseSelectArgs x
       Left e -> Left e
       Right (x, xs) -> if (parseCompare x "from" && xs /= "")
         then case (parseWord xs) of
-          --(x, ';', xs) | (x, ' ', xs) -> Right (xs, SelectStatement { selectArgs = (selectArgs b), fromArgs = x})
           (x1, sym, xs1) | elem sym "; " -> Right (xs1, SelectStatement { selectArgs = (selectArgs b), fromArgs = x1})
           (x1, sym, _) -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x1
         else Left "Missing from statement"
-
-    --  parseFromArgs :: Either ErrorMessage ([String], ParsedStatement) -> Either ErrorMessage ([String], ParsedStatement)
-    --parseFromArgs (Left e) = Left e
-    --parseFromArgs (Right (a, b)) = if (parseCompare (a !! 0) "from")
-    --  then Right (snd parseArgsResult, SelectStatement { selectArgs = (selectArgs b), fromArgs = (fst parseArgsResult)})
-    --  else Left "Missing from statement"
-    --  where parseArgsResult = parseArgs $ tail a
-
-    --parseWhereArgs :: Either ErrorMessage ([String], ParsedStatement) -> Either ErrorMessage ParsedStatement
-    --parseWhereArgs (Left e) = Left e
-    --parseWhereArgs (Right ([], a)) = Right SelectStatement { selectArgs = (selectArgs a), fromArgs = (fromArgs a), whereArgs = []}
-    --parseWhereArgs (Right (a, b)) = if (parseCompare (a !! 0) "where")
-    --  then Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = (fst parseArgsResult)}
-    --  else Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = []}
-    --  where parseArgsResult = parseArgs $ tail a
 
     parseWhereArgs :: Either ErrorMessage (String, ParsedStatement) -> Either ErrorMessage ParsedStatement
     parseWhereArgs (Left e) = Left e
@@ -181,64 +134,11 @@ parseSelect x = parseWhereArgs $ parseFromArgs $ parseSelectArgs x
       Left e -> Left e
       Right (x, xs) -> if (parseCompare x "where")
         then parseWhereArgs' (xs, b)
-      --then case (parseWord xs) of
-      --  --(x, ',', _) | (x, '(', _) | (x, ')', _) -> Left $ "Unexpected symbol after " ++ x
-      --  (x1, sym, _) | elem sym ",()" -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x1
-      --  --(x, ';', _) | (x, ' ', _) -> Left $ "Missing predicate after " ++ x
-      --  (x1, sym, _) | elem sym "; " -> Left $ "Missing predicate after " ++ x1
-      --  (x1, '=', xs1) -> case (parseWord xs1) of
-      --    (x2, ';', _) -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = [(x1, x2, equal)] }
-      --    (x2, ' ', xs2) -> case (parseKeyword xs2) of
-      --      Left e -> Left e
-      --      Right (x3, xs3) -> if (parseCompare x3 "or")
-      --        then case (parseWhereArgs (Right (xs3, b))) of
-      --          Left e -> Left e
-      --          Right parseRes -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = (x1, x2, equal) : (whereArgs parseRes)}
-      --        else Left $ "Unrecognised statement: " ++ x3
-      --    (x2, _, _) -> Left $ "Unexpected symbol after " ++ x2
-      --  (x1, '>', xs1) -> if ((xs1 !! 0) == '=')
-      --    then case (parseWord $ tail xs1) of
-      --      (x2, ';', _) -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = [(x1, x2, moreOrEqual)] }
-      --      (x2, ' ', xs2) -> case (parseKeyword xs2) of
-      --       Left e -> Left e
-      --       Right (x3, xs3) -> if (parseCompare x3 "or")
-      --          then case(parseWhereArgs (Right (xs3, b))) of
-      --            Left e -> Left e
-      --            Right parseRes -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = (x1, x2, moreOrEqual) : (whereArgs parseRes)}
-      --         else Left $ "Unrecognised statement: " ++ x3
-      --      (x2, _, _) -> Left $ "Unexpected symbol after " ++ x2
-      --    else Left "Unexpected symbol after >"
-      --  (x1, '<', xs1) -> if ((xs1 !! 0) == '=')
-      --    then case (parseWord $ tail xs1) of
-      --      (x2, ';', _) -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = [(x1, x2, lessOrEqual)] }
-      --      (x2, ' ', xs2) -> case (parseKeyword xs2) of
-      --       Left e -> Left e
-      --       Right (x3, xs3) -> if (parseCompare x3 "or")
-      --          then case(parseWhereArgs (Right (xs3, b))) of
-      --            Left e -> Left e
-      --            Right parseRes -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = (x1, x2, lessOrEqual) : (whereArgs parseRes)}
-      --         else Left $ "Unrecognised statement: " ++ x3
-      --      (x2, _, _) -> Left $ "Unexpected symbol after " ++ x2
-      --    else if ((xs1 !! 0) == '>')
-      --      then case (parseWord $ tail xs1) of
-      --        (x2, ';', _) -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = [(x1, x2, unequal)] }
-      --        (x2, ' ', xs2) -> case (parseKeyword xs2) of
-      --          Left e -> Left e
-      --          Right (x3, xs3) -> if (parseCompare x3 "or")
-      --            then case(parseWhereArgs (Right (xs3, b))) of
-      --              Left e -> Left e
-      --              Right parseRes -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = (x1, x2, unequal) : (whereArgs parseRes)}
-      --            else Left $ "Unrecognised statement: " ++ x3
-      --        (x2, _, _) -> Left $ "Unexpected symbol after " ++ x2
-      --      else Left "Unexpected symbol after <"
       else Left $ "Unrecognised statement: " ++ x
-
       where
         parseWhereArgs' :: (String, ParsedStatement) -> Either ErrorMessage ParsedStatement
         parseWhereArgs' (a, b) = case (parseWord a) of
-          --(x, ',', _) | (x, '(', _) | (x, ')', _) -> Left $ "Unexpected symbol after " ++ x
           (x1, sym, _) | elem sym ",()" -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x1
-          --(x, ';', _) | (x, ' ', _) -> Left $ "Missing predicate after " ++ x
           (x1, sym, _) | elem sym "; " -> Left $ "Missing predicate after " ++ x1
           (x1, '=', xs1) -> case (parseWord xs1) of
             (x2, ';', _) -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = [(x1, x2, equal)] }
@@ -285,20 +185,6 @@ parseSelect x = parseWhereArgs $ parseFromArgs $ parseSelectArgs x
                     else Left $ "Unrecognised statement: " ++ x3
                 (x2, _, _) -> Left $ "Unexpected symbol after " ++ x2
               else Left "Unexpected symbol after <"
-    --parseArgs :: [String] -> ([String], [String])
-    --parseArgs [] = ([], [])
-    --parseArgs (x:xs) = if(checkComma x)
-    --  then ((parseCommaPhrase x) ++ fst parsedArgs, snd parsedArgs)
-    --  else ((parseCommaPhrase x), xs)
-    --  where
-        --getArgsSplit :: [String] -> ([String], [String])
-        --getArgsSplit [] = ([], [])
-        --parseArgs (x:xs) = if(checkComma x)
-        --  then (x : fst parsedArgs, snd parsedArgs)
-        --  else (x, xs)
-        --  where parsedArgs = getArgsSplit xs
-
-        --parsedArgs = parseArgs xs                
 
 getFunction :: String -> Either ErrorMessage ([Value] -> Value)
 getFunction a = if (parseCompare a "max")
@@ -306,49 +192,6 @@ getFunction a = if (parseCompare a "max")
   else if (parseCompare a "sum")
     then Right Lib2.sum
     else Left $ "Unrecognised function: " ++ a
---parseSelect :: [String] -> Either ErrorMessage ParsedStatement
---parseSelect [] = Left "Incomplete select statement"
---parseSelect x = parseWhereArgs $ parseFromArgs $ parseSelectArgs x
---  where
---    parseSelectArgs :: [String] -> Either ErrorMessage ([String], ParsedStatement)
---    parseSelectArgs [] = Left "Reached unknown state"
---    parseSelectArgs [a] = Left "Missing from statement"
---    parseSelectArgs (x:xs) = if(checkComma x) 
---      then case (parseSelectArgs xs) of
---        Left e -> Left e
---        Right statement -> Right (fst (statement), SelectStatement { selectArgs = ((parseComma x) : (selectArgs (snd statement))) })  
---      else Right (xs, SelectStatement { selectArgs = [x] })
---    parseSelectArgs _ = Left "Reached unknown state"
-
---    parseFromArgs :: Either ErrorMessage ([String], ParsedStatement) -> Either ErrorMessage ([String], ParsedStatement)
---    parseFromArgs (Left e) = Left e
---    parseFromArgs (Right (a, b)) = if (parseCompare (a !! 0) "from")
---      then Right (snd parseArgsResult, SelectStatement { selectArgs = (selectArgs b), fromArgs = (fst parseArgsResult)})
---      else Left "Missing from statement"
---      where parseArgsResult = parseArgs $ tail a
-
---    parseWhereArgs :: Either ErrorMessage ([String], ParsedStatement) -> Either ErrorMessage ParsedStatement
---    parseWhereArgs (Left e) = Left e
---   parseWhereArgs (Right ([], a)) = Right SelectStatement { selectArgs = (selectArgs a), fromArgs = (fromArgs a), whereArgs = []}
---    parseWhereArgs (Right (a, b)) = if (parseCompare (a !! 0) "where")
---      then Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = (fst parseArgsResult)}
---      else Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = []}
---      where parseArgsResult = parseArgs $ tail a
-
---    parseArgs :: [String] -> ([String], [String])
---    parseArgs [] = ([], [])
---    parseArgs (x:xs) = if(checkComma x)
---      then ((parseCommaPhrase x) ++ fst parsedArgs, snd parsedArgs)
---      else ((parseCommaPhrase x), xs)
---      where
---        --getArgsSplit :: [String] -> ([String], [String])
---        --getArgsSplit [] = ([], [])
---        --parseArgs (x:xs) = if(checkComma x)
---        --  then (x : fst parsedArgs, snd parsedArgs)
---        --  else (x, xs)
---        --  where parsedArgs = getArgsSplit xs
-
---        parsedArgs = parseArgs xs                 
 
 trpl1 (a, _, _) = a
 trpl2 (_, a, _) = a
@@ -372,72 +215,26 @@ removeWhitespace [] = ("", ';')
 removeWhitespace (' ':xs) = removeWhitespace xs
 removeWhitespace (x:xs) = if (isTerminating x) then (xs, x) else (x:xs, ' ')
 
-checkComma :: String -> Bool
-checkComma a = if ((last a) == ',') then True else False
-
---parseShow :: [String] -> Either ErrorMessage ParsedStatement
---parseShow [] = Left "Show statement incomplete"
---parseShow (x:xs) =
---  if(parseCompare x "tables")
---    then Right ShowTableStatement { showTableArgs = Nothing }
---    else if(parseCompare x "table")
---      then parseTableName xs
---      else Left "Unrecognised show command"
-
 parseShow :: String -> Either ErrorMessage ParsedStatement
 parseShow [] = Left "Show statement incomplete"
 parseShow a = case (parseKeyword a) of
   Left e -> Left e
   Right (x, xs) -> if (parseCompare x "tables")
-    then Right ShowTableStatement { showTableArgs = Nothing }
+    then if (xs == "") 
+      then Right ShowTableStatement { showTableArgs = Nothing } 
+      else Left "Too many arguments in show tables command"
     else if(parseCompare x "table")
       then if (xs /= "") then parseTableName xs else Left "Missing table arguments"
       else Left "Unrecognised show command"
 
---parseTableName :: [String] -> Either ErrorMessage ParsedStatement
---parseTableName (a : _) = Right ShowTableStatement { showTableArgs = Just ((parseCommas [a]) !! 0)}
---parseTableName _ = Left "Incorrect table name input"
-
 parseTableName :: String -> Either ErrorMessage ParsedStatement
 parseTableName a = case (parseWord a) of
   (result, ';', _) -> Right ShowTableStatement { showTableArgs = Just result}
-  _ -> Left "Too many argument in show table statement"
-
-parseCommas :: [String] -> [String]
-parseCommas [] = []
-parseCommas [x] = parseCommaPhrase x
-parseCommas (x : xs) = (parseCommaPhrase x) ++ (parseCommas xs)
-
-parseCommaPhrase :: String -> [String]
-parseCommaPhrase x = removeEmpty $ parsePhrase $ parseComma x
-  where
-    removeEmpty :: [String] -> [String]
-    removeEmpty [] = []
-    removeEmpty (x : xs) = if (x == "") then removeEmpty xs else x : removeEmpty xs
-
-parseComma :: String -> String
-parseComma [] = []
-parseComma (x : xs) = if (x == ',') then ' ' : (parseComma xs) else x : (parseComma xs)
+  _ -> Left "Too many arguments in show table statement"
 
 parseEndSemicolon :: String -> String
 parseEndSemicolon [] = ""
 parseEndSemicolon (x:xs) = if (x == ';') then "" else x : parseEndSemicolon xs
-
-parsePhrase :: String -> [String]
-parsePhrase [] = []
-parsePhrase stringy = (parseWord stringy) : parsePhrase(removeWord stringy)
- where
-    removeWord :: String -> String
-    removeWord [] = []
-    removeWord (x:xs) = if (x == ' ') then xs else removeWord xs
-
-    parseWord :: String -> String
-    parseWord [] = ""
-    parseWord (a:xs) = if (a == ' ') then "" else a : parseWord xs
-
-removeEmpty :: [String] -> [String]
-removeEmpty [] = []
-removeEmpty (x : xs) = if (x == "") then removeEmpty xs else x : removeEmpty xs
 
 parseCompare :: String -> String -> Bool
 parseCompare [] [] = True
