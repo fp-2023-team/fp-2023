@@ -7,19 +7,12 @@ module Lib2
   )
 where
 
-import DataFrame (DataFrame)
-import InMemoryTables (TableName)
+import DataFrame
+import InMemoryTables
+import Lib1
 
 type ErrorMessage = String
 type Database = [(TableName, DataFrame)]
-
--- Keep the type, modify constructors
-data Value
-  = IntegerValue Integer
-  | StringValue String
-  | BoolValue Bool
-  | NullValue
-  deriving (Show, Eq)
 
 -- Keep the type, modify constructors
 data ParsedStatement = SelectStatement {
@@ -239,14 +232,22 @@ parseEndSemicolon (x:xs) = if (x == ';') then "" else x : parseEndSemicolon xs
 parseCompare :: String -> String -> Bool
 parseCompare [] [] = True
 parseCompare (x:xs) (a:ab) = if (toLower(x) == toLower(a)) then parseCompare xs ab else False
-    where
-      toLower :: Char -> Char
-      toLower ch
-        | elem ch ['A'..'Z'] = toEnum $ fromEnum ch + 32
-        | otherwise = ch
 parseCompare _ _ = False
 
 -- Executes a parsed statemet. Produces a DataFrame. Uses
 -- InMemoryTables.databases a source of data.
 executeStatement :: ParsedStatement -> Either ErrorMessage DataFrame
-executeStatement _ = Left "Not implemented: executeStatement"
+executeStatement statement@(SelectStatement _ _ _) = executeSelect statement
+    where
+        executeSelect :: ParsedStatement -> Either ErrorMessage DataFrame
+        executeSelect statement' = Left "Select not implemented yet"
+executeStatement statement@(ShowTableStatement _) = executeShow statement
+    where
+        executeShow :: ParsedStatement -> Either ErrorMessage DataFrame
+        executeShow statement' = case showTableArgs statement' of
+            Nothing -> Right $ DataFrame
+                [ Column "table name" StringType ]
+                [ [ StringValue (fst table) ] | table <- database ]
+            Just tableName -> maybe (Left $ "Could not find table " ++ tableName)
+                (\value -> Right value)
+                (findTableByName database tableName)
