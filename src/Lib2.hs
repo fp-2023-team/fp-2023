@@ -237,17 +237,25 @@ parseCompare _ _ = False
 -- Executes a parsed statemet. Produces a DataFrame. Uses
 -- InMemoryTables.databases a source of data.
 executeStatement :: ParsedStatement -> Either ErrorMessage DataFrame
-executeStatement statement@(SelectStatement _ _ _) = executeSelect statement
+executeStatement (SelectStatement selectArgs fromArgs whereArgs) = case table of
+    Nothing -> Left "Could not find table"
+    Just (DataFrame columns rows) -> case selectArgs of
+        list@(Left _:_) -> if True then
+                Left $ "Column selection and table column mismatch"
+            else
+                Left $ "Function select not implemented yet"
+        list@(Right _:_) -> if True then
+                Left $ "Column selection and table column mismatch"
+            else
+                Left $ "Column select not implemented yet"
+        _ -> Left "Got an empty select list"
     where
-        executeSelect :: ParsedStatement -> Either ErrorMessage DataFrame
-        executeSelect statement' = Left "Select not implemented yet"
-executeStatement statement@(ShowTableStatement _) = executeShow statement
-    where
-        executeShow :: ParsedStatement -> Either ErrorMessage DataFrame
-        executeShow statement' = case showTableArgs statement' of
-            Nothing -> Right $ DataFrame
-                [ Column "table name" StringType ]
-                [ [ StringValue (fst table) ] | table <- database ]
-            Just tableName -> maybe (Left $ "Could not find table " ++ tableName)
-                (\value -> Right value)
-                (findTableByName database tableName)
+        table :: Maybe DataFrame
+        table = findTableByName database fromArgs
+executeStatement (ShowTableStatement showTableArgs) = case showTableArgs of
+    Nothing -> Right $ DataFrame
+        [ Column "table name" StringType ]
+        [ [ StringValue (fst table) ] | table <- database ]
+    Just tableName -> maybe (Left $ "Could not find table " ++ tableName)
+        (\value -> Right value)
+        (findTableByName database tableName)

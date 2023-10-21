@@ -54,8 +54,8 @@ parseSelectAllStatement inputStr
 -- Credit: Almantas Mecele
 validateDataFrame :: DataFrame -> Either ErrorMessage ()
 validateDataFrame (DataFrame cols rows)
-    | any (\row -> length row /= colLength) rows = Left "column count and row length mismatch"
-    | any (\row -> any (\zipped -> not $ compatibleType zipped) (zip cols row)) rows = Left "column type and row value mismatch"
+    | any (\row -> length row /= colLength) rows = Left "Column count and row length mismatch"
+    | any (\row -> any (\zipped -> not $ compatibleType zipped) (zip cols row)) rows = Left "Column type and row value mismatch"
     | otherwise = Right ()
     where
         colLength :: Int
