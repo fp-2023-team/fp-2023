@@ -7,6 +7,8 @@ module Lib2
   )
 where
 
+import Data.Either
+import Data.List
 import DataFrame
 import InMemoryTables
 import Lib1
@@ -239,16 +241,33 @@ parseCompare _ _ = False
 executeStatement :: ParsedStatement -> Either ErrorMessage DataFrame
 executeStatement (SelectStatement selectArgs fromArgs whereArgs) = case table of
     Nothing -> Left "Could not find table"
-    Just (DataFrame columns rows) -> case selectArgs of
-        list@(Left _:_) -> if True then
-                Left $ "Column selection and table column mismatch"
-            else
-                Left $ "Function select not implemented yet"
-        list@(Right _:_) -> if True then
-                Left $ "Column selection and table column mismatch"
-            else
-                Left $ "Column select not implemented yet"
-        _ -> Left "Got an empty select list"
+    Just (DataFrame columns rows) ->
+        if (any (isLeft) selectArgs && any(isRight) selectArgs) then
+            Left $ "Cannot select by column name and by function at the same time"
+        else if (intersect selectColumnNames tableColumnNames /= selectColumnNames)
+                || (intersect whereColumnNames tableColumnNames /= whereColumnNames) then
+            Left $ "Table lacks columns used in statement"
+        else case selectArgs of
+            list@(Left _:_) -> Left $ "Function select not implemented yet"
+            list@(Right _:_) -> Left $ "Column select not implemented yet"
+            _ -> Left "Got an empty select list"
+        where
+            tableColumnNames :: [String]
+            tableColumnNames = [ columnName | Column columnName _ <- columns ]
+            selectColumnNames :: [String]
+            selectColumnNames = map (getSelectColumnName) selectArgs
+                where
+                    getSelectColumnName :: Either (String, [Value] -> Value) String -> String
+                    getSelectColumnName (Right str) = str
+                    getSelectColumnName (Left (str, _)) = str
+            whereColumnNames :: [String]
+            whereColumnNames = getWhereColumnNames whereArgs []
+                where
+                    getWhereColumnNames :: [(String, String, String -> String -> Bool)]
+                            -> [String] -> [String]
+                    getWhereColumnNames [] result = result
+                    getWhereColumnNames ((column1, column2, _):xs) result = getWhereColumnNames xs
+                            (column1:column2:result)
     where
         table :: Maybe DataFrame
         table = findTableByName database fromArgs
