@@ -38,10 +38,46 @@ data ParsedStatement = SelectStatement {
 
 -- Functions to implement
 max :: [Value] -> Value
-max a = a !! 0
+max values@(value:_) = case value of
+    IntegerValue _ -> maxInteger values
+    StringValue _ -> maxString values
+    BoolValue _ -> maxBool values
+    _ -> NullValue
+    where
+        maxInteger :: [Value] -> Value
+        maxInteger values = do
+            let values' = [value | IntegerValue value <- values]
+            if null values' then
+                NullValue
+            else
+                IntegerValue $ maximum values'
+        maxString :: [Value] -> Value
+        maxString values = do
+            let values' = [value | StringValue value <- values]
+            if null values' then
+                NullValue
+            else
+                StringValue $ maximum values'
+        maxBool :: [Value] -> Value
+        maxBool values = do
+            let values' = [value | StringValue value <- values]
+            if null values' then
+                NullValue
+            else
+                StringValue $ maximum values'
 
 sum :: [Value] -> Value
-sum a = a !! 0
+sum values@(value:_) = case value of
+    IntegerValue _ -> sumInteger values
+    _ -> NullValue
+    where
+        sumInteger :: [Value] -> Value
+        sumInteger values = do
+            let values' = [value | IntegerValue value <- values]
+            if null values' then
+                NullValue
+            else
+                IntegerValue $ Data.List.sum values'
 
 equal :: String -> String -> Bool
 equal = (==)
@@ -241,27 +277,35 @@ parseCompare _ _ = False
 executeStatement :: ParsedStatement -> Either ErrorMessage DataFrame
 executeStatement (SelectStatement selectArgs' fromArgs' whereArgs') = case findTableByName database fromArgs' of
     Nothing -> Left $ "Could not find table " ++ fromArgs'
-    Just table@(DataFrame columns rows) ->
+    -- If the table was found,
+    Just table@(DataFrame columns _) ->
+        -- Ensure select only has selection by column value or only by function
         if (any (isLeft) selectArgs' && any(isRight) selectArgs') then
-            Left $ "Cannot select by column name and by function at the same time"
+            Left $ "Cannot select by column value and by function at the same time"
+        -- Check if the column names mentioned in the selection arguments actually exist
         else if (intersect selectColumnNames tableColumnNames /= selectColumnNames)
                 || (intersect whereColumnNames tableColumnNames /= whereColumnNames) then
             Left $ "Statement references columns which do not exist in table"
+        -- Ensure comparisons are done between string type columns only
         else if (any
                 (\(columnName1, columnName2, _) -> getColumnTypeByName columns columnName1 /= Just StringType
                     || getColumnTypeByName columns columnName2 /= Just StringType)
                 whereArgs') then
             Left $ "Only comparisons between string type columns are allowed in `where`"
+        -- Finally print the table
         else do
-            -- Firstly - filter out by where
-            -- Secondly - filter out by select
-           -- let selectionNamedRows = [[value | value@(name, _) <- row, elem name selectColumnNames] | row <- filteredNamedRows]
-           -- let selectionRows = [snd $ unzip selectionNamedRows | filteredNamedValues <- selectionNamedRows]
-            let selectionTable = createFilteredTable table selectColumnNames whereArgs' -- $ snd $ unzip [ namedValues | namedValues <- namedRows, any (\(colName1, colName2, op) -> op colName1 colName2) whereArgs]
+            let selectionTable = createFilteredTable table selectColumnNames whereArgs'
             case selectArgs' of
-                (Left _:_) -> Right selectionTable
+                -- If selectArgs' is Left, then it's (String, [Value] -> Value)
+                (Left _:_) -> do
+                    let DataFrame filteredCols filteredRows = selectionTable
+                    let functionsToApply = map (snd) (getOnlyLefts selectArgs')
+                    let transposedRows = transpose filteredRows
+                    let mappedRows = [ mapByIndex functionsToApply transposedRows ]
+                    Right $ DataFrame filteredCols mappedRows
+                -- If selectArgs' is Right, then it's only String
                 (Right _:_) -> Right selectionTable
-                _ -> Left "Empty select list"
+                _ -> Left $ "Empty select list"
         where
             tableColumnNames :: [String]
             tableColumnNames = [ columnName | Column columnName _ <- columns ]
@@ -279,10 +323,9 @@ executeStatement (SelectStatement selectArgs' fromArgs' whereArgs') = case findT
                     getWhereColumnNames [] result = result
                     getWhereColumnNames ((columnName1, columnName2, _):xs) result =
                         getWhereColumnNames xs (columnName1:columnName2:result)
-
 executeStatement (ShowTableStatement showTableArgs') = case showTableArgs' of
     Nothing -> Right $ DataFrame
-        [ Column "table name" StringType ]
+        [ Column "table_name" StringType ]
         [ [ StringValue (fst table) ] | table <- database ]
     Just tableName -> maybe (Left $ "Could not find table " ++ tableName)
         (\value -> Right value)
@@ -294,29 +337,22 @@ getColumnTypeByName cols name = do
     return colType
 
 nullOrAny :: (Foldable t) => (a -> Bool) -> t a -> Bool
-nullOrAny f x
-    | null x = True
-    | otherwise = any f x
+nullOrAny f x = null x || any f x
 
-listToListLookup :: (Eq a) => [a] -> [(a, b)] -> [b]
-listToListLookup list targetList = listToListLookup' list targetList []
-    where
-        listToListLookup' [] _ result = result
-        listToListLookup' _ [] result = result
-        listToListLookup' (x:xs) y result = case lookup x y of
-            Nothing -> listToListLookup' xs y result
-            Just z -> listToListLookup' xs y (z:result)
-
+-- Applies where filters and column selection to a table, creating a new table
 createFilteredTable :: DataFrame
     -> [String]
     -> [(String, String, String -> String -> Bool)]
     -> DataFrame
 createFilteredTable (DataFrame columns rows) selectColumnNames whereArgs' = DataFrame selectionCols selectionRows
     where
-        namedRows :: [[(String, Value)]]
-        namedRows = [zip [columnName | (Column columnName _) <- columns] row | row <- rows]
+        -- The columns we'll be keeping
         selectionCols :: [Column]
         selectionCols = [column | column@(Column name _) <- columns, elem name selectColumnNames]
+        -- Give row values their column name
+        namedRows :: [[(String, Value)]]
+        namedRows = [zip [columnName | (Column columnName _) <- columns] row | row <- rows]
+        -- Apply where filter to rows
         filteredNamedRows :: [[(String, Value)]]
         filteredNamedRows = [ namedValues | namedValues <- namedRows,
             nullOrAny
@@ -326,9 +362,32 @@ createFilteredTable (DataFrame columns rows) selectColumnNames whereArgs' = Data
                 getStringValue :: Maybe Value -> String
                 getStringValue (Just (StringValue string)) = string
                 getStringValue _ = ""
+        -- Rid the values in a row where the column name is not used in selection
         selectionNamedRows :: [[(String, Value)]]
         selectionNamedRows = [[namedValue | namedValue@(name, _) <- namedValues,
                 elem name selectColumnNames]
             | namedValues <- filteredNamedRows]
+        -- Finally remove column names from row values
         selectionRows :: [Row]
         selectionRows = [snd $ unzip namedValues | namedValues <- selectionNamedRows]
+
+-- Applies each function in the list to the second list element of the same index
+-- So 1st function affects only the 1st element,
+-- 2nd function affects the 2nd element,
+-- and so on.
+mapByIndex :: [(a -> b)] -> [a] -> [b]
+mapByIndex functions lists = reverse $ mapLists' functions lists []
+    where
+        mapLists' :: [(a -> b)] -> [a] -> [b] -> [b]
+        mapLists' [] _ result = result
+        mapLists' _ [] result = result
+        mapLists' (f:fs) (x:xs) result = mapLists' fs xs ((f x):result)
+
+-- Culls a list of Either from Right elements
+getOnlyLefts :: [Either a b] -> [a]
+getOnlyLefts list = [val | Left val <- list]
+
+-- Culls a list of Either from Left elements
+getOnlyRights :: [Either a b] -> [b]
+getOnlyRights list = [val | Right val <- list]
+
