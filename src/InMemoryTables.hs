@@ -79,5 +79,19 @@ tableWithNulls =
       ]
   )
 
+tableWithDuplicateColumns :: (TableName, DataFrame)
+tableWithDuplicateColumns = (
+    "duplicates",
+    DataFrame
+        [Column "x" StringType, Column "y" StringType]
+        [
+            [StringValue "a", StringValue "a"],
+            [StringValue "a", StringValue "b"],
+            [StringValue "b", StringValue "a"],
+            [StringValue "b", StringValue "b"]
+        ]
+    )
+
 database :: [(TableName, DataFrame)]
-database = [tableEmployees, tableInvalid1, tableInvalid2, tableLongStrings, tableWithNulls]
+database = [tableEmployees, tableInvalid1, tableInvalid2,
+        tableLongStrings, tableWithNulls, tableWithDuplicateColumns]

@@ -44,16 +44,16 @@ sum :: [Value] -> Value
 sum a = a !! 0
 
 equal :: String -> String -> Bool
-equal a b = False
+equal = (==)
 
 unequal :: String -> String -> Bool
-unequal a b = False
+unequal = (/=)
 
 lessOrEqual :: String -> String -> Bool
-lessOrEqual a b = False
+lessOrEqual = (<=)
 
 moreOrEqual :: String -> String -> Bool
-moreOrEqual a b = False
+moreOrEqual = (>=)
 
 -- Parses user input into an entity representing a parsed
 -- statement
@@ -239,42 +239,96 @@ parseCompare _ _ = False
 -- Executes a parsed statemet. Produces a DataFrame. Uses
 -- InMemoryTables.databases a source of data.
 executeStatement :: ParsedStatement -> Either ErrorMessage DataFrame
-executeStatement (SelectStatement selectArgs fromArgs whereArgs) = case table of
-    Nothing -> Left "Could not find table"
-    Just (DataFrame columns rows) ->
-        if (any (isLeft) selectArgs && any(isRight) selectArgs) then
+executeStatement (SelectStatement selectArgs' fromArgs' whereArgs') = case findTableByName database fromArgs' of
+    Nothing -> Left $ "Could not find table " ++ fromArgs'
+    Just table@(DataFrame columns rows) ->
+        if (any (isLeft) selectArgs' && any(isRight) selectArgs') then
             Left $ "Cannot select by column name and by function at the same time"
         else if (intersect selectColumnNames tableColumnNames /= selectColumnNames)
                 || (intersect whereColumnNames tableColumnNames /= whereColumnNames) then
-            Left $ "Table lacks columns used in statement"
-        else case selectArgs of
-            list@(Left _:_) -> Left $ "Function select not implemented yet"
-            list@(Right _:_) -> Left $ "Column select not implemented yet"
-            _ -> Left "Got an empty select list"
+            Left $ "Statement references columns which do not exist in table"
+        else if (any
+                (\(columnName1, columnName2, _) -> getColumnTypeByName columns columnName1 /= Just StringType
+                    || getColumnTypeByName columns columnName2 /= Just StringType)
+                whereArgs') then
+            Left $ "Only comparisons between string type columns are allowed in `where`"
+        else do
+            -- Firstly - filter out by where
+            -- Secondly - filter out by select
+           -- let selectionNamedRows = [[value | value@(name, _) <- row, elem name selectColumnNames] | row <- filteredNamedRows]
+           -- let selectionRows = [snd $ unzip selectionNamedRows | filteredNamedValues <- selectionNamedRows]
+            let selectionTable = createFilteredTable table selectColumnNames whereArgs' -- $ snd $ unzip [ namedValues | namedValues <- namedRows, any (\(colName1, colName2, op) -> op colName1 colName2) whereArgs]
+            case selectArgs' of
+                (Left _:_) -> Right selectionTable
+                (Right _:_) -> Right selectionTable
+                _ -> Left "Empty select list"
         where
             tableColumnNames :: [String]
             tableColumnNames = [ columnName | Column columnName _ <- columns ]
             selectColumnNames :: [String]
-            selectColumnNames = map (getSelectColumnName) selectArgs
+            selectColumnNames = map (getSelectColumnName) selectArgs'
                 where
                     getSelectColumnName :: Either (String, [Value] -> Value) String -> String
                     getSelectColumnName (Right str) = str
                     getSelectColumnName (Left (str, _)) = str
             whereColumnNames :: [String]
-            whereColumnNames = getWhereColumnNames whereArgs []
+            whereColumnNames = getWhereColumnNames whereArgs' []
                 where
                     getWhereColumnNames :: [(String, String, String -> String -> Bool)]
                             -> [String] -> [String]
                     getWhereColumnNames [] result = result
-                    getWhereColumnNames ((column1, column2, _):xs) result = getWhereColumnNames xs
-                            (column1:column2:result)
-    where
-        table :: Maybe DataFrame
-        table = findTableByName database fromArgs
-executeStatement (ShowTableStatement showTableArgs) = case showTableArgs of
+                    getWhereColumnNames ((columnName1, columnName2, _):xs) result =
+                        getWhereColumnNames xs (columnName1:columnName2:result)
+
+executeStatement (ShowTableStatement showTableArgs') = case showTableArgs' of
     Nothing -> Right $ DataFrame
         [ Column "table name" StringType ]
         [ [ StringValue (fst table) ] | table <- database ]
     Just tableName -> maybe (Left $ "Could not find table " ++ tableName)
         (\value -> Right value)
         (findTableByName database tableName)
+
+getColumnTypeByName :: [Column] -> String -> Maybe ColumnType
+getColumnTypeByName cols name = do
+    (Column _ colType) <- find (\(Column colName _) -> colName == name) cols
+    return colType
+
+nullOrAny :: (Foldable t) => (a -> Bool) -> t a -> Bool
+nullOrAny f x
+    | null x = True
+    | otherwise = any f x
+
+listToListLookup :: (Eq a) => [a] -> [(a, b)] -> [b]
+listToListLookup list targetList = listToListLookup' list targetList []
+    where
+        listToListLookup' [] _ result = result
+        listToListLookup' _ [] result = result
+        listToListLookup' (x:xs) y result = case lookup x y of
+            Nothing -> listToListLookup' xs y result
+            Just z -> listToListLookup' xs y (z:result)
+
+createFilteredTable :: DataFrame
+    -> [String]
+    -> [(String, String, String -> String -> Bool)]
+    -> DataFrame
+createFilteredTable (DataFrame columns rows) selectColumnNames whereArgs' = DataFrame selectionCols selectionRows
+    where
+        namedRows :: [[(String, Value)]]
+        namedRows = [zip [columnName | (Column columnName _) <- columns] row | row <- rows]
+        selectionCols :: [Column]
+        selectionCols = [column | column@(Column name _) <- columns, elem name selectColumnNames]
+        filteredNamedRows :: [[(String, Value)]]
+        filteredNamedRows = [ namedValues | namedValues <- namedRows,
+            nullOrAny
+                (\(colName1, colName2, op) -> op (getStringValue $ lookup colName1 namedValues)
+                (getStringValue $ lookup colName2 namedValues)) whereArgs']
+            where
+                getStringValue :: Maybe Value -> String
+                getStringValue (Just (StringValue string)) = string
+                getStringValue _ = ""
+        selectionNamedRows :: [[(String, Value)]]
+        selectionNamedRows = [[namedValue | namedValue@(name, _) <- namedValues,
+                elem name selectColumnNames]
+            | namedValues <- filteredNamedRows]
+        selectionRows :: [Row]
+        selectionRows = [snd $ unzip namedValues | namedValues <- selectionNamedRows]
