@@ -5,6 +5,8 @@ module Lib1
     findTableByName,
     validateDataFrame,
     renderDataFrameAsTable,
+    toLower,
+    toLowerStr,
   )
 where
 
@@ -39,10 +41,10 @@ findTableByName database tableName = lookup (toLowerStr tableName) database
 -- Credit: Almantas Mecele
 parseSelectAllStatement :: String -> Either ErrorMessage TableName
 parseSelectAllStatement inputStr
-    | length truncSplitStr < 4 = Left "too short of a query"
-    | truncSplitStr !! 0 /= "select" = Left "first word not 'select'"
-    | truncSplitStr !! 1 /= "*" = Left "column selection not a wild card"
-    | truncSplitStr !! 2 /= "from" = Left "third word not 'from'"
+    | length truncSplitStr < 4 = Left "Too short of a query"
+    | truncSplitStr !! 0 /= "select" = Left "First word not 'select'"
+    | truncSplitStr !! 1 /= "*" = Left "Column selection not a wild card"
+    | truncSplitStr !! 2 /= "from" = Left "Third word not 'from'"
     | otherwise = Right $ unwords $ drop 3 truncSplitStr
     where
         truncSplitStr = words $ toLowerStr $ takeWhile (/= ';') inputStr
@@ -52,8 +54,8 @@ parseSelectAllStatement inputStr
 -- Credit: Almantas Mecele
 validateDataFrame :: DataFrame -> Either ErrorMessage ()
 validateDataFrame (DataFrame cols rows)
-    | any (\row -> length row /= colLength) rows = Left "column count and row length mismatch"
-    | any (\row -> any (\zipped -> not $ compatibleType zipped) (zip cols row)) rows = Left "column type and row value mismatch"
+    | any (\row -> length row /= colLength) rows = Left "Column count and row length mismatch"
+    | any (\row -> any (\zipped -> not $ compatibleType zipped) (zip cols row)) rows = Left "Column type and row value mismatch"
     | otherwise = Right ()
     where
         colLength :: Int
