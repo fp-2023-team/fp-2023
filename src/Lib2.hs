@@ -94,17 +94,26 @@ moreOrEqual = (>=)
 -- Parses user input into an entity representing a parsed
 -- statement
 parseStatement :: String -> Either ErrorMessage ParsedStatement
-parseStatement a = parseStatementList $ parseEndSemicolon a
+parseStatement a = parseStatement' $ normaliseString $ parseEndSemicolon a
   where 
-    parseStatementList :: String -> Either ErrorMessage ParsedStatement
-    parseStatementList [] = Left "No statement found" 
-    parseStatementList a = case (parseKeyword a) of
-      Left e -> Left e
-      Right (x, xs) -> if(parseCompare x "select") 
+    parseStatement' :: String -> Either ErrorMessage ParsedStatement
+    parseStatement' [] = Left "No statement found" 
+    parseStatement' a = do
+      (x, xs) <- parseKeyword a
+      result <- if(parseCompare x "select")
         then if (xs /= "") then parseSelect xs else Left "Select statement incomplete"
         else if(parseCompare x "show")
           then if (xs /= "") then parseShow xs else Left "Show statement incomplete"
           else Left "Keyword unrecognised"
+      return(result)
+
+normaliseString :: String -> String
+normaliseString [] = []
+normaliseString (x:xs) = ((normaliseChar x):(normaliseString xs))
+  where 
+    normaliseChar :: Char -> Char
+    normaliseChar x | elem x "\n\t" = ' '
+    normaliseChar x = x
 
 parseKeyword :: String -> Either ErrorMessage (String, String)
 parseKeyword a = if (isTerminating (trpl2 parseResult))
@@ -118,7 +127,11 @@ isTerminating _ = False
 
 parseSelect :: String -> Either ErrorMessage ParsedStatement
 parseSelect [] = Left "Incomplete select statement"
-parseSelect x = parseWhereArgs $ parseFromArgs $ parseSelectArgs x
+parseSelect x = do
+  x1 <- parseSelectArgs x
+  x2 <- parseFromArgs x1
+  result <- parseWhereArgs x2
+  return(result)
   where
     parseSelectArgs :: String -> Either ErrorMessage (String, ParsedStatement)
     parseSelectArgs [] = Left "Reached unknown state"
@@ -148,9 +161,8 @@ parseSelect x = parseWhereArgs $ parseFromArgs $ parseSelectArgs x
     getTermination (x:xs) | elem x ",<>=()" = x
     getTermination (_:xs) = ' '
 
-    parseFromArgs :: Either ErrorMessage (String, ParsedStatement) -> Either ErrorMessage (String, ParsedStatement)
-    parseFromArgs (Left e) = Left e
-    parseFromArgs (Right (a, b)) = case (parseKeyword a) of
+    parseFromArgs :: (String, ParsedStatement) -> Either ErrorMessage (String, ParsedStatement)
+    parseFromArgs (a, b) = case (parseKeyword a) of
       Left e -> Left e
       Right (x, xs) -> if (parseCompare x "from" && xs /= "")
         then case (parseWord xs) of
@@ -158,10 +170,9 @@ parseSelect x = parseWhereArgs $ parseFromArgs $ parseSelectArgs x
           (x1, sym, _) -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x1
         else Left "Missing from statement"
 
-    parseWhereArgs :: Either ErrorMessage (String, ParsedStatement) -> Either ErrorMessage ParsedStatement
-    parseWhereArgs (Left e) = Left e
-    parseWhereArgs (Right ([], a)) = Right SelectStatement { selectArgs = (selectArgs a), fromArgs = (fromArgs a), whereArgs = []}
-    parseWhereArgs (Right (a, b)) = case (parseKeyword a) of
+    parseWhereArgs :: (String, ParsedStatement) -> Either ErrorMessage ParsedStatement
+    parseWhereArgs ([], a) = Right SelectStatement { selectArgs = (selectArgs a), fromArgs = (fromArgs a), whereArgs = []}
+    parseWhereArgs (a, b) = case (parseKeyword a) of
       Left e -> Left e
       Right (x, xs) -> if (parseCompare x "where")
         then parseWhereArgs' (xs, b)
@@ -244,7 +255,7 @@ parseWord a = parseWord' (fst $ removeWhitespace a)
 removeWhitespace :: String -> (String, Char)
 removeWhitespace [] = ("", ';')
 removeWhitespace (' ':xs) = removeWhitespace xs
-removeWhitespace (x:xs) = if (isTerminating x) then (xs, x) else (x:xs, ' ')
+removeWhitespace (x:xs) = if (isTerminating x) then (x:xs, x) else (x:xs, ' ')
 
 parseShow :: String -> Either ErrorMessage ParsedStatement
 parseShow [] = Left "Show statement incomplete"
