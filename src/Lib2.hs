@@ -136,7 +136,8 @@ parseSelect x = do
     parseSelectArgs :: String -> Either ErrorMessage (String, ParsedStatement)
     parseSelectArgs [] = Left "Reached unknown state"
     parseSelectArgs a = case (parseWord a) of
-      (x, sym, _) | elem sym "=<>)" -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
+      (x, sym, _) | (elem sym "=<>)") -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
+                  | x == "" -> Left $ "Unexpected " ++ [sym]
       (_, ';', _) -> Left "Missing from statememnt"
       (x, ' ', xs) -> Right (xs, SelectStatement { selectArgs = [Right x]})
       (x, ',', xs) -> case (parseSelectArgs xs) of
@@ -181,6 +182,7 @@ parseSelect x = do
         parseWhereArgs' :: (String, ParsedStatement) -> Either ErrorMessage ParsedStatement
         parseWhereArgs' (a, b) = case (parseWord a) of
           (x1, sym, _) | elem sym ",()" -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x1
+                       | x == "" -> Left $ "Unexpected " ++ [sym]
           (x1, sym, _) | elem sym "; " -> Left $ "Missing predicate after " ++ x1
           (x1, '=', xs1) -> case (parseWord xs1) of
             (x2, ';', _) -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = [(x1, x2, equal)] }
@@ -191,7 +193,7 @@ parseSelect x = do
                   Left e -> Left e
                   Right parseRes -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = (x1, x2, equal) : (whereArgs parseRes)}
                 else Left $ "Unrecognised statement: " ++ x3
-            (x2, _, _) -> Left $ "Unexpected symbol after " ++ x2
+            (x2, temp, _) -> Left $ "Unexpected symbol after " ++ x2
           (x1, '>', xs1) -> if ((xs1 !! 0) == '=')
             then case (parseWord $ tail xs1) of
               (x2, ';', _) -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = [(x1, x2, moreOrEqual)] }
@@ -248,14 +250,17 @@ parseWord a = parseWord' (fst $ removeWhitespace a)
     parseWord' (x:xs) = if (isTerminating x) 
       then ("", x, xs)
       else if (x /= ' ') then (x : trpl1 parseResult, trpl2 parseResult, trpl3 parseResult)
-      else ("", snd unwhitespaced, fst unwhitespaced)
+      else ("", snd unwhitespaced, removeCharIfTerminating (fst unwhitespaced)) --Kazkodel nukanda visiems stringams (ir raidems) pirma simboli (nes nukanda kai nera terminating symbol)
       where parseResult = parseWord' xs
             unwhitespaced = removeWhitespace xs
+
+removeCharIfTerminating :: String -> String
+removeCharIfTerminating (x:xs) = if(isTerminating x) then xs else x:xs 
 
 removeWhitespace :: String -> (String, Char)
 removeWhitespace [] = ("", ';')
 removeWhitespace (' ':xs) = removeWhitespace xs
-removeWhitespace (x:xs) = if (isTerminating x) then (x:xs, x) else (x:xs, ' ')
+removeWhitespace (x:xs) = if (isTerminating x) then (x:xs, x) else (x:xs, ' ') -- cia blaogai kai pradzioje iskviecia ir pasalina skirybos zenkla
 
 parseShow :: String -> Either ErrorMessage ParsedStatement
 parseShow [] = Left "Show statement incomplete"
