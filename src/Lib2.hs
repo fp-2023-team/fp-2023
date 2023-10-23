@@ -294,17 +294,23 @@ executeStatement (SelectStatement selectArgs' fromArgs' whereArgs') = case findT
             Left $ "Only comparisons between string type columns are allowed in `where`"
         -- Finally print the table
         else do
-            let selectionTable = createFilteredTable table selectColumnNames whereArgs'
+            let DataFrame columns' rows' = createFilteredTable table whereArgs'
+            let columnValues = combineColumnsWithValues columns' rows' -- [(Column, [Value])]
             case selectArgs' of
                 -- If selectArgs' is Left, then it's (String, [Value] -> Value)
                 (Left _:_) -> do
-                    let DataFrame filteredCols filteredRows = selectionTable
-                    let functionsToApply = map (snd) (getOnlyLefts selectArgs')
-                    let transposedRows = transpose filteredRows
-                    let mappedRows = [ mapByIndex functionsToApply transposedRows ]
-                    Right $ DataFrame filteredCols mappedRows
+                    let columnNamesAndFunctions = getOnlyLefts selectArgs'
+                    -- Check if column names match and apply functions
+                    let resultColumnValues = [(Column colName colType, [func $ values]) | (name, func) <- columnNamesAndFunctions, (Column colName colType, values) <- columnValues, name == colName]
+                    let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
+                    Right $ DataFrame (fst resultColumnsRows) (snd resultColumnsRows)
                 -- If selectArgs' is Right, then it's only String
-                (Right _:_) -> Right selectionTable
+                (Right _:_) -> do
+                    let columnNames = getOnlyRights selectArgs'
+                    -- Check if column names match
+                    let resultColumnValues = [columnValue | columnName <- columnNames, columnValue@(Column name _, _) <- columnValues, columnName == name]
+                    let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
+                    Right $ DataFrame (fst resultColumnsRows) (snd resultColumnsRows) 
                 _ -> Left $ "Empty select list"
         where
             tableColumnNames :: [String]
@@ -341,14 +347,10 @@ nullOrAny f x = null x || any f x
 
 -- Applies where filters and column selection to a table, creating a new table
 createFilteredTable :: DataFrame
-    -> [String]
     -> [(String, String, String -> String -> Bool)]
     -> DataFrame
-createFilteredTable (DataFrame columns rows) selectColumnNames whereArgs' = DataFrame selectionCols selectionRows
+createFilteredTable (DataFrame columns rows) whereArgs' = DataFrame columns filteredRows
     where
-        -- The columns we'll be keeping
-        selectionCols :: [Column]
-        selectionCols = [column | column@(Column name _) <- columns, elem name selectColumnNames]
         -- Give row values their column name
         namedRows :: [[(String, Value)]]
         namedRows = [zip [columnName | (Column columnName _) <- columns] row | row <- rows]
@@ -362,26 +364,9 @@ createFilteredTable (DataFrame columns rows) selectColumnNames whereArgs' = Data
                 getStringValue :: Maybe Value -> String
                 getStringValue (Just (StringValue string)) = string
                 getStringValue _ = ""
-        -- Rid the values in a row where the column name is not used in selection
-        selectionNamedRows :: [[(String, Value)]]
-        selectionNamedRows = [[namedValue | namedValue@(name, _) <- namedValues,
-                elem name selectColumnNames]
-            | namedValues <- filteredNamedRows]
         -- Finally remove column names from row values
-        selectionRows :: [Row]
-        selectionRows = [snd $ unzip namedValues | namedValues <- selectionNamedRows]
-
--- Applies each function in the list to the second list element of the same index
--- So 1st function affects only the 1st element,
--- 2nd function affects the 2nd element,
--- and so on.
-mapByIndex :: [(a -> b)] -> [a] -> [b]
-mapByIndex functions lists = reverse $ mapLists' functions lists []
-    where
-        mapLists' :: [(a -> b)] -> [a] -> [b] -> [b]
-        mapLists' [] _ result = result
-        mapLists' _ [] result = result
-        mapLists' (f:fs) (x:xs) result = mapLists' fs xs ((f x):result)
+        filteredRows :: [Row]
+        filteredRows = [snd $ unzip namedValues | namedValues <- filteredNamedRows]
 
 -- Culls a list of Either from Right elements
 getOnlyLefts :: [Either a b] -> [a]
@@ -391,3 +376,10 @@ getOnlyLefts list = [val | Left val <- list]
 getOnlyRights :: [Either a b] -> [b]
 getOnlyRights list = [val | Right val <- list]
 
+-- Zips row values by column
+combineColumnsWithValues :: [a] -> [[b]] -> [(a, [b])]
+combineColumnsWithValues columns rows = zip columns $ transpose rows
+
+-- Unzips row values by column
+uncombineColumnsFromValues :: [(a, [b])] -> ([a], [[b]])
+uncombineColumnsFromValues mapped = (fst $ unzip mapped, transpose $ snd $ unzip mapped)
