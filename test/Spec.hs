@@ -2,6 +2,8 @@ import Data.Either
 import Data.Maybe ()
 import InMemoryTables qualified as D
 import Lib1
+import Lib2
+import DataFrame
 import Test.Hspec
 
 main :: IO ()
@@ -38,7 +40,7 @@ main = hspec $ do
     it "parses a show tables statement" $ do
       Lib2.parseStatement "SHOW TABLES;" `shouldSatisfy` isRight
     it "parses a show tables statement case insensitively" $ do
-      Lib2.parseStatement "ShoW TAbLeS;" `shouldSatisfy` isRight 
+      Lib2.parseStatement "ShoW TAbLeS;" `shouldSatisfy` isRight
     it "parses a show table statement" $ do
       Lib2.parseStatement "SHOW TABLE employees;" `shouldSatisfy` isRight
     it "parses a show table statement with case sensitive name" $ do
@@ -63,67 +65,93 @@ main = hspec $ do
       Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" `shouldSatisfy` isRight
   describe "Lib2.executeStatement" $ do
     it "executes a show tables statement" $ do
-      Lib2.executeStatement Lib2.parseStatement "SHOW TABLES;" `shouldBe` testRes1
+      case Lib2.parseStatement "SHOW TABLES;" of 
+        Left err -> err `shouldBe` "should have successfully parsed"
+        Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes1
     it "parses a show tables statement case insensitively" $ do
-      Lib2.executeStatementv Lib2.parseStatement "ShoW TAbLeS;" `shouldBe` testRes1
+      case Lib2.parseStatement "ShoW TAbLeS;" of 
+        Left err -> err `shouldBe` "should have successfully parsed"
+        Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes1
     it "parses a show table statement" $ do
-      Lib2.executeStatement Lib2.parseStatement "SHOW TABLE employees;" `shouldBe` testRes2
+      case Lib2.parseStatement "SHOW TABLE employees;" of 
+        Left err -> err `shouldBe` "should have successfully parsed"
+        Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes2
     it "parses a select statement with collumns" $ do
-      Lib2.executeStatement Lib2.parseStatement "SELECT id, surname FROM employees;" `shouldBe` testRes3
+      case Lib2.parseStatement "SELECT id, surname FROM employees;" of 
+        Left err -> err `shouldBe` "should have successfully parsed"
+        Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes3
     it "parses a max function" $ do
-      Lib2.executeStatement Lib2.parseStatement "SELECT MAX(id) FROM employees;" `shouldBe` [Column "1" IntegerType] [[IntegerValue 2]]
+      case Lib2.parseStatement "SELECT MAX(id) FROM employees;" of 
+        Left err -> err `shouldBe` "should have successfully parsed"
+        Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
+                                                                          [[IntegerValue 2]])
     it "parses a sum function" $ do
-      Lib2.executeStatement Lib2.parseStatement "SELECT SUM(id) FROM employees;" `shouldBe` [Column "1" IntegerType] [[IntegerValue 3]]
+      case Lib2.parseStatement "SELECT SUM(id) FROM employees;" of 
+        Left err -> err `shouldBe` "should have successfully parsed"
+        Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
+                                                                          [[IntegerValue 3]])
     it "parses a where or function with strings, = comparison" $ do
-      Lib2.executeStatement Lib2.parseStatement "SELECT * FROM duplicates WHERE x = 'a' OR y = 'a';" `shouldBe` testRes4
+      case Lib2.parseStatement "SELECT * FROM duplicates WHERE x = 'a' OR y = 'a';" of 
+        Left err -> err `shouldBe` "should have successfully parsed"
+        Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes4
     it "parses a where function with strings, <> comparison" $ do
-      Lib2.executeStatement Lib2.parseStatement "SELECT * FROM duplicates WHERE x <> y;" `shouldBe` testRes5
-    it "parses a where or function with strings, >= comparison" $ do
-      Lib2.executeStatement Lib2.parseStatement "SELECT * FROM employees WHERE id => 2 OR name >= 'Va';" `shouldbe` (snd D.tableEmployees)
+      case Lib2.parseStatement "SELECT * FROM duplicates WHERE x <> y;" of 
+        Left err -> err `shouldBe` "should have successfully parsed"
+        Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes5
+    it "SELECT * FROM employees WHERE id => 2 OR name >= 'Va';" $ do
+      case Lib2.parseStatement "SHOW TABLES;" of 
+        Left err -> err `shouldBe` "should have successfully parsed"
+        Right ps -> Lib2.executeStatement ps `shouldBe` Right (snd D.tableEmployees)
     it "parses a where or function with strings, <= comparison, combined with sum" $ do
-      Lib2.executeStatement Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" [Column "1" IntegerType] [[IntegerValue 2]]
+      case Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" of 
+        Left err -> err `shouldBe` "should have successfully parsed"
+        Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "1" IntegerType] 
+                                                                        [[IntegerValue 2]])
 
 testRes1 :: DataFrame
-testRes1 = 
-  [Column "1" StringType]
-  [
-    [StringType "employees"],
-    [StringType "invalid1"],
-    [StringType "invalid2"],
-    [StringType "long_strings"],
-    [StringType "flags"],
-    [StringType "duplicates"],
+testRes1 = DataFrame
+  [Column "table_name" StringType]
+  [ 
+    [StringValue "employees"],
+    [StringValue "invalid1"],
+    [StringValue "invalid2"],
+    [StringValue "long_strings"],
+    [StringValue "flags"],
+    [StringValue "duplicates"]
   ]
 
 testRes2 :: DataFrame
-testRes2 = 
-  [Column "1" StringType]
+testRes2 = DataFrame
+  [Column "column_name" StringType, Column "column_type" StringType]
   [
-    [StringType "id"],
-    [StringType "name"],
-    [StringType "surname"],
+    [StringValue "id", StringValue "Integer"],
+    [StringValue "name", StringValue "String"],
+    [StringValue "surname", StringValue "String"]
   ]
 
 testRes3 :: DataFrame
-testRes3 = 
+testRes3 = DataFrame
   [Column "id" IntegerType, Column "surname" StringType]
   [ [IntegerValue 1, StringValue "Po"],
     [IntegerValue 2, StringValue "Dl"]
   ]
 
 testRes4 :: DataFrame
-testRes4 = 
+testRes4 = DataFrame
   [Column "x" StringType, Column "y" StringType]
     [
         [StringValue "a", StringValue "a"],
         [StringValue "a", StringValue "b"],
-        [StringValue "b", StringValue "a"],
+        [StringValue "b", StringValue "a"]
     ]
 
 testRes5 :: DataFrame
-testRes5 = 
+testRes5 = DataFrame
   [Column "x" StringType, Column "y" StringType]
     [
         [StringValue "a", StringValue "b"],
-        [StringValue "b", StringValue "a"],
+        [StringValue "b", StringValue "a"]
     ]
+
+instance Show ParsedStatement where
+  show _ = "parsed statement"
