@@ -255,6 +255,7 @@ parseWord a = parseWord' (fst $ removeWhitespace a)
             unwhitespaced = removeWhitespace xs
 
 removeCharIfTerminating :: String -> String
+removeCharIfTerminating [] = []
 removeCharIfTerminating (x:xs) = if(isTerminating x) then xs else x:xs 
 
 removeWhitespace :: String -> (String, Char)
