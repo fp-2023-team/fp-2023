@@ -295,12 +295,23 @@ executeStatement (SelectStatement selectArgs' fromArgs' whereArgs') = case findT
     Nothing -> Left $ "Could not find table " ++ fromArgs'
     -- If the table was found,
     Just table@(DataFrame columns _) ->
+        -- Ensure we have some select columns
+        if (null selectColumnNames) then
+            Left $ "Got zero columns to select"
         -- Ensure select only has selection by column value or only by function
-        if (any (isLeft) selectArgs' && any(isRight) selectArgs') then
+        else if (any (isLeft) selectArgs' && any(isRight) selectArgs') then
             Left $ "Cannot select by column value and by function at the same time"
-        -- Check if the column names mentioned in the selection arguments actually exist
-        else if (intersect selectColumnNames tableColumnNames /= selectColumnNames)
-                || (intersect whereColumnNames tableColumnNames /= whereColumnNames) then
+        -- Wildcard only once
+        else if (let (x:xs) = selectColumnNames in x == "*" && not (null xs)) then
+            Left $ "Can only select all columns once"
+        -- Cannot use wildcard with functions
+        else if (let (x:xs) = selectColumnNames in x == "*" && not (null (getOnlyLefts selectArgs'))) then
+            Left $ "Cannot apply function to wildcard"
+        -- Check if the column names mentioned in the selection arguments actually exist,
+        -- fall-through for wildcard
+        else if (((intersect selectColumnNames tableColumnNames /= selectColumnNames)
+                    || (intersect whereColumnNames tableColumnNames /= whereColumnNames))
+                && not (let (x:xs) = selectColumnNames in x == "*" && null xs)) then
             Left $ "Statement references columns which do not exist in table"
         -- Ensure comparisons are done between string type columns only
         else if (any
@@ -312,17 +323,19 @@ executeStatement (SelectStatement selectArgs' fromArgs' whereArgs') = case findT
         else do
             let DataFrame columns' rows' = createFilteredTable table whereArgs'
             let columnValues = combineColumnsWithValues columns' rows' -- [(Column, [Value])]
-            case selectArgs' of
-                -- If selectArgs' is Left, then it's (String, [Value] -> Value)
+            -- Check for wildcard, too
+            let selectArgs'' = let (x:_) = selectColumnNames in if x == "*" then [Right columnName | columnName <- tableColumnNames] else selectArgs'
+            case selectArgs'' of
+                -- If selectArgs'' is Left, then it's (String, [Value] -> Value)
                 (Left _:_) -> do
-                    let columnNamesAndFunctions = getOnlyLefts selectArgs'
+                    let columnNamesAndFunctions = getOnlyLefts selectArgs''
                     -- Check if column names match and apply functions
                     let resultColumnValues = [(Column colName colType, [func $ values]) | (name, func) <- columnNamesAndFunctions, (Column colName colType, values) <- columnValues, name == colName]
                     let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
                     Right $ DataFrame (fst resultColumnsRows) (snd resultColumnsRows)
-                -- If selectArgs' is Right, then it's only String
+                -- If selectArgs'' is Right, then it's only String
                 (Right _:_) -> do
-                    let columnNames = getOnlyRights selectArgs'
+                    let columnNames = getOnlyRights selectArgs''
                     -- Check if column names match
                     let resultColumnValues = [columnValue | columnName <- columnNames, columnValue@(Column name _, _) <- columnValues, columnName == name]
                     let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
