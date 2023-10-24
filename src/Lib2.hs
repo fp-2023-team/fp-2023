@@ -364,7 +364,9 @@ executeStatement (ShowTableStatement showTableArgs') = case showTableArgs' of
         [ Column "table_name" StringType ]
         [ [ StringValue (fst table) ] | table <- database ]
     Just tableName -> maybe (Left $ "Could not find table " ++ tableName)
-        (\value -> Right value)
+        (\(DataFrame cols _) -> Right $ DataFrame
+            [Column "column_name" StringType, Column "column_type" StringType]
+            [[StringValue name, StringValue $ show colType] | Column name colType <- cols])
         (findTableByName database tableName)
 
 getColumnTypeByName :: [Column] -> String -> Maybe ColumnType
