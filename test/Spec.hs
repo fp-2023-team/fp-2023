@@ -105,7 +105,7 @@ main = hspec $ do
     it "parses a where or function with strings, <= comparison, combined with sum" $ do
       case Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" of 
         Left err -> err `shouldBe` "should have successfully parsed"
-        Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "1" IntegerType] 
+        Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                         [[IntegerValue 2]])
 
 testRes1 :: DataFrame
@@ -122,11 +122,11 @@ testRes1 = DataFrame
 
 testRes2 :: DataFrame
 testRes2 = DataFrame
-  [Column "column_name" StringType, Column "column_type" StringType]
+  [Column "column_name" StringType, Column "data_type" StringType]
   [
-    [StringValue "id", StringValue "Integer"],
-    [StringValue "name", StringValue "String"],
-    [StringValue "surname", StringValue "String"]
+    [StringValue "id", StringValue "integer"],
+    [StringValue "name", StringValue "string"],
+    [StringValue "surname", StringValue "string"]
   ]
 
 testRes3 :: DataFrame
