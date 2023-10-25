@@ -94,17 +94,26 @@ moreOrEqual = (>=)
 -- Parses user input into an entity representing a parsed
 -- statement
 parseStatement :: String -> Either ErrorMessage ParsedStatement
-parseStatement a = parseStatementList $ parseEndSemicolon a
+parseStatement a = parseStatement' $ normaliseString $ parseEndSemicolon a
   where 
-    parseStatementList :: String -> Either ErrorMessage ParsedStatement
-    parseStatementList [] = Left "No statement found" 
-    parseStatementList a = case (parseKeyword a) of
-      Left e -> Left e
-      Right (x, xs) -> if(parseCompare x "select") 
+    parseStatement' :: String -> Either ErrorMessage ParsedStatement
+    parseStatement' [] = Left "No statement found" 
+    parseStatement' a = do
+      (x, xs) <- parseKeyword a
+      result <- if(parseCompare x "select")
         then if (xs /= "") then parseSelect xs else Left "Select statement incomplete"
         else if(parseCompare x "show")
           then if (xs /= "") then parseShow xs else Left "Show statement incomplete"
           else Left "Keyword unrecognised"
+      return(result)
+
+normaliseString :: String -> String
+normaliseString [] = []
+normaliseString (x:xs) = ((normaliseChar x):(normaliseString xs))
+  where 
+    normaliseChar :: Char -> Char
+    normaliseChar x | elem x "\n\t" = ' '
+    normaliseChar x = x
 
 parseKeyword :: String -> Either ErrorMessage (String, String)
 parseKeyword a = if (isTerminating (trpl2 parseResult))
@@ -118,12 +127,17 @@ isTerminating _ = False
 
 parseSelect :: String -> Either ErrorMessage ParsedStatement
 parseSelect [] = Left "Incomplete select statement"
-parseSelect x = parseWhereArgs $ parseFromArgs $ parseSelectArgs x
+parseSelect x = do
+  x1 <- parseSelectArgs x
+  x2 <- parseFromArgs x1
+  result <- parseWhereArgs x2
+  return(result)
   where
     parseSelectArgs :: String -> Either ErrorMessage (String, ParsedStatement)
     parseSelectArgs [] = Left "Reached unknown state"
     parseSelectArgs a = case (parseWord a) of
-      (x, sym, _) | elem sym "=<>)" -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
+      (x, sym, _) | (elem sym "=<>)") -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
+                  | x == "" -> Left $ "Unexpected " ++ [sym]
       (_, ';', _) -> Left "Missing from statememnt"
       (x, ' ', xs) -> Right (xs, SelectStatement { selectArgs = [Right x]})
       (x, ',', xs) -> case (parseSelectArgs xs) of
@@ -148,9 +162,8 @@ parseSelect x = parseWhereArgs $ parseFromArgs $ parseSelectArgs x
     getTermination (x:xs) | elem x ",<>=()" = x
     getTermination (_:xs) = ' '
 
-    parseFromArgs :: Either ErrorMessage (String, ParsedStatement) -> Either ErrorMessage (String, ParsedStatement)
-    parseFromArgs (Left e) = Left e
-    parseFromArgs (Right (a, b)) = case (parseKeyword a) of
+    parseFromArgs :: (String, ParsedStatement) -> Either ErrorMessage (String, ParsedStatement)
+    parseFromArgs (a, b) = case (parseKeyword a) of
       Left e -> Left e
       Right (x, xs) -> if (parseCompare x "from" && xs /= "")
         then case (parseWord xs) of
@@ -158,10 +171,9 @@ parseSelect x = parseWhereArgs $ parseFromArgs $ parseSelectArgs x
           (x1, sym, _) -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x1
         else Left "Missing from statement"
 
-    parseWhereArgs :: Either ErrorMessage (String, ParsedStatement) -> Either ErrorMessage ParsedStatement
-    parseWhereArgs (Left e) = Left e
-    parseWhereArgs (Right ([], a)) = Right SelectStatement { selectArgs = (selectArgs a), fromArgs = (fromArgs a), whereArgs = []}
-    parseWhereArgs (Right (a, b)) = case (parseKeyword a) of
+    parseWhereArgs :: (String, ParsedStatement) -> Either ErrorMessage ParsedStatement
+    parseWhereArgs ([], a) = Right SelectStatement { selectArgs = (selectArgs a), fromArgs = (fromArgs a), whereArgs = []}
+    parseWhereArgs (a, b) = case (parseKeyword a) of
       Left e -> Left e
       Right (x, xs) -> if (parseCompare x "where")
         then parseWhereArgs' (xs, b)
@@ -170,6 +182,7 @@ parseSelect x = parseWhereArgs $ parseFromArgs $ parseSelectArgs x
         parseWhereArgs' :: (String, ParsedStatement) -> Either ErrorMessage ParsedStatement
         parseWhereArgs' (a, b) = case (parseWord a) of
           (x1, sym, _) | elem sym ",()" -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x1
+                       | x == "" -> Left $ "Unexpected " ++ [sym]
           (x1, sym, _) | elem sym "; " -> Left $ "Missing predicate after " ++ x1
           (x1, '=', xs1) -> case (parseWord xs1) of
             (x2, ';', _) -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = [(x1, x2, equal)] }
@@ -180,7 +193,7 @@ parseSelect x = parseWhereArgs $ parseFromArgs $ parseSelectArgs x
                   Left e -> Left e
                   Right parseRes -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = (x1, x2, equal) : (whereArgs parseRes)}
                 else Left $ "Unrecognised statement: " ++ x3
-            (x2, _, _) -> Left $ "Unexpected symbol after " ++ x2
+            (x2, temp, _) -> Left $ "Unexpected symbol after " ++ x2
           (x1, '>', xs1) -> if ((xs1 !! 0) == '=')
             then case (parseWord $ tail xs1) of
               (x2, ';', _) -> Right SelectStatement { selectArgs = (selectArgs b), fromArgs = (fromArgs b), whereArgs = [(x1, x2, moreOrEqual)] }
@@ -237,14 +250,18 @@ parseWord a = parseWord' (fst $ removeWhitespace a)
     parseWord' (x:xs) = if (isTerminating x) 
       then ("", x, xs)
       else if (x /= ' ') then (x : trpl1 parseResult, trpl2 parseResult, trpl3 parseResult)
-      else ("", snd unwhitespaced, fst unwhitespaced)
+      else ("", snd unwhitespaced, removeCharIfTerminating (fst unwhitespaced)) --Kazkodel nukanda visiems stringams (ir raidems) pirma simboli (nes nukanda kai nera terminating symbol)
       where parseResult = parseWord' xs
             unwhitespaced = removeWhitespace xs
+
+removeCharIfTerminating :: String -> String
+removeCharIfTerminating [] = []
+removeCharIfTerminating (x:xs) = if(isTerminating x) then xs else x:xs 
 
 removeWhitespace :: String -> (String, Char)
 removeWhitespace [] = ("", ';')
 removeWhitespace (' ':xs) = removeWhitespace xs
-removeWhitespace (x:xs) = if (isTerminating x) then (xs, x) else (x:xs, ' ')
+removeWhitespace (x:xs) = if (isTerminating x) then (x:xs, x) else (x:xs, ' ') -- cia blaogai kai pradzioje iskviecia ir pasalina skirybos zenkla
 
 parseShow :: String -> Either ErrorMessage ParsedStatement
 parseShow [] = Left "Show statement incomplete"
@@ -279,12 +296,23 @@ executeStatement (SelectStatement selectArgs' fromArgs' whereArgs') = case findT
     Nothing -> Left $ "Could not find table " ++ fromArgs'
     -- If the table was found,
     Just table@(DataFrame columns _) ->
+        -- Ensure we have some select columns
+        if (null selectColumnNames) then
+            Left $ "Got zero columns to select"
         -- Ensure select only has selection by column value or only by function
-        if (any (isLeft) selectArgs' && any(isRight) selectArgs') then
+        else if (any (isLeft) selectArgs' && any(isRight) selectArgs') then
             Left $ "Cannot select by column value and by function at the same time"
-        -- Check if the column names mentioned in the selection arguments actually exist
-        else if (intersect selectColumnNames tableColumnNames /= selectColumnNames)
-                || (intersect whereColumnNames tableColumnNames /= whereColumnNames) then
+        -- Wildcard only once
+        else if (let (x:xs) = selectColumnNames in x == "*" && not (null xs)) then
+            Left $ "Can only select all columns once"
+        -- Cannot use wildcard with functions
+        else if (let (x:xs) = selectColumnNames in x == "*" && not (null (getOnlyLefts selectArgs'))) then
+            Left $ "Cannot apply function to wildcard"
+        -- Check if the column names mentioned in the selection arguments actually exist,
+        -- fall-through for wildcard
+        else if (((intersect selectColumnNames tableColumnNames /= selectColumnNames)
+                    || (intersect whereColumnNames tableColumnNames /= whereColumnNames))
+                && not (let (x:xs) = selectColumnNames in x == "*" && null xs)) then
             Left $ "Statement references columns which do not exist in table"
         -- Ensure comparisons are done between string type columns only
         else if (any
@@ -296,17 +324,19 @@ executeStatement (SelectStatement selectArgs' fromArgs' whereArgs') = case findT
         else do
             let DataFrame columns' rows' = createFilteredTable table whereArgs'
             let columnValues = combineColumnsWithValues columns' rows' -- [(Column, [Value])]
-            case selectArgs' of
-                -- If selectArgs' is Left, then it's (String, [Value] -> Value)
+            -- Check for wildcard, too
+            let selectArgs'' = let (x:_) = selectColumnNames in if x == "*" then [Right columnName | columnName <- tableColumnNames] else selectArgs'
+            case selectArgs'' of
+                -- If selectArgs'' is Left, then it's (String, [Value] -> Value)
                 (Left _:_) -> do
-                    let columnNamesAndFunctions = getOnlyLefts selectArgs'
+                    let columnNamesAndFunctions = getOnlyLefts selectArgs''
                     -- Check if column names match and apply functions
                     let resultColumnValues = [(Column colName colType, [func $ values]) | (name, func) <- columnNamesAndFunctions, (Column colName colType, values) <- columnValues, name == colName]
                     let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
                     Right $ DataFrame (fst resultColumnsRows) (snd resultColumnsRows)
-                -- If selectArgs' is Right, then it's only String
+                -- If selectArgs'' is Right, then it's only String
                 (Right _:_) -> do
-                    let columnNames = getOnlyRights selectArgs'
+                    let columnNames = getOnlyRights selectArgs''
                     -- Check if column names match
                     let resultColumnValues = [columnValue | columnName <- columnNames, columnValue@(Column name _, _) <- columnValues, columnName == name]
                     let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
@@ -334,7 +364,9 @@ executeStatement (ShowTableStatement showTableArgs') = case showTableArgs' of
         [ Column "table_name" StringType ]
         [ [ StringValue (fst table) ] | table <- database ]
     Just tableName -> maybe (Left $ "Could not find table " ++ tableName)
-        (\value -> Right value)
+        (\(DataFrame cols _) -> Right $ DataFrame
+            [Column "column_name" StringType, Column "column_type" StringType]
+            [[StringValue name, StringValue $ show colType] | Column name colType <- cols])
         (findTableByName database tableName)
 
 getColumnTypeByName :: [Column] -> String -> Maybe ColumnType
