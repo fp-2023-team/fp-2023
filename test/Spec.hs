@@ -110,7 +110,7 @@ main = hspec $ do
       case Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= surname;" of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
-                                                                        [[IntegerValue 0]])
+                                                                        [[NullValue]])
 
 testRes1 :: DataFrame
 testRes1 = DataFrame
