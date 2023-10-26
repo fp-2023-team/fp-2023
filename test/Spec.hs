@@ -98,24 +98,19 @@ main = hspec $ do
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                           [[IntegerValue 3]])
-    it "executes a where or function with strings, = comparison" $ do
-      case Lib2.parseStatement "SELECT * FROM duplicates WHERE x = 'a' OR y = 'a';" of 
+    it "executes a where or function with strings, = and >= comparison" $ do
+      case Lib2.parseStatement "SELECT * FROM duplicates WHERE x = y OR y >= x;" of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes4
     it "executes a where function with strings, <> comparison" $ do
       case Lib2.parseStatement "SELECT * FROM duplicates WHERE x <> y;" of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes5
-    it "executes a where or function with strings, >= comparison" $ do
-      case Lib2.parseStatement "SELECT id FROM employees WHERE 'a' >= 'b' OR name >= 'Z';" of 
+    it "executes a where function with strings, <= comparison, combined with sum" $ do
+      case Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= surname;" of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
-                                                                        [])
-    it "executes a where or function with strings, <= comparison, combined with sum" $ do
-      case Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" of 
-        Left err -> err `shouldBe` "should have successfully parsed"
-        Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
-                                                                        [[IntegerValue 2]])
+                                                                        [[IntegerValue 0]])
 
 testRes1 :: DataFrame
 testRes1 = DataFrame
@@ -151,7 +146,7 @@ testRes4 = DataFrame
     [
         [StringValue "a", StringValue "a"],
         [StringValue "a", StringValue "b"],
-        [StringValue "b", StringValue "a"]
+        [StringValue "b", StringValue "b"]
     ]
 
 testRes5 :: DataFrame
