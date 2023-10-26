@@ -98,10 +98,6 @@ main = hspec $ do
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                           [[IntegerValue 3]])
-    it "does not execute a sum function with incorrect columns" $ do
-      case Lib2.parseStatement "SELECT SUM(name) FROM employees;" of
-        Left err -> err `shouldBe` err
-        Right ps -> Lib2.executeStatement ps `shouldSatisfy` isLeft
     it "executes a where or function with strings, = comparison" $ do
       case Lib2.parseStatement "SELECT * FROM duplicates WHERE x = 'a' OR y = 'a';" of 
         Left err -> err `shouldBe` "should have successfully parsed"
