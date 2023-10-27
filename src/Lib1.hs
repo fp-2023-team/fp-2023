@@ -34,7 +34,7 @@ toLowerStr str = [toLower ch | ch <- str]
 -- in provided Database list
 -- Credit: Almantas Mecele
 findTableByName :: Database -> String -> Maybe DataFrame
-findTableByName database tableName = lookup (toLowerStr tableName) database
+findTableByName database tableName = lookup tableName database
 
 -- 2) implement the function which parses a "select * from ..."
 -- sql statement and extracts a table name from the statement
