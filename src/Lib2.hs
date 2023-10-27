@@ -323,7 +323,7 @@ executeStatement (SelectStatement selectArgs' fromArgs' whereArgs') = case findT
         -- Finally print the table
         else do
             let DataFrame columns' rows' = createFilteredTable table whereArgs'
-            let columnValues = combineColumnsWithValues columns' rows' -- [(Column, [Value])]
+            let columnValues = combineColumnsWithValues columns' (if null rows' then [map (\x -> NullValue) columns'] else rows') -- [(Column, [Value])]
             -- Check for wildcard, too
             let selectArgs'' = let (x:_) = selectColumnNames in if x == "*" then [Right columnName | columnName <- tableColumnNames] else selectArgs'
             case selectArgs'' of

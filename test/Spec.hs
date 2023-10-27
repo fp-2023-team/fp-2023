@@ -15,8 +15,9 @@ main = hspec $ do
       Lib1.findTableByName D.database "" `shouldBe` Nothing
     it "can find by name" $ do
       Lib1.findTableByName D.database "employees" `shouldBe` Just (snd D.tableEmployees)
-    it "can find by case-insensitive name" $ do
-      Lib1.findTableByName D.database "employEEs" `shouldBe` Just (snd D.tableEmployees)
+      -- Commented out because of the changed requirements: names are now case sensitive
+--    it "can find by case-insensitive name" $ do
+--      Lib1.findTableByName D.database "employEEs" `shouldBe` Just (snd D.tableEmployees)
   describe "Lib1.parseSelectAllStatement" $ do
     it "handles empty input" $ do
       Lib1.parseSelectAllStatement "" `shouldSatisfy` isLeft
