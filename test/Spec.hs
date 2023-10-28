@@ -2,7 +2,7 @@ import Data.Either
 import Data.Maybe ()
 import InMemoryTables qualified as D
 import Lib1
-import Lib2
+import Lib2(ParsedStatement(..))
 import DataFrame
 import Test.Hspec
 
