@@ -15,9 +15,8 @@ main = hspec $ do
       Lib1.findTableByName D.database "" `shouldBe` Nothing
     it "can find by name" $ do
       Lib1.findTableByName D.database "employees" `shouldBe` Just (snd D.tableEmployees)
-      -- Commented out because of the changed requirements: names are now case sensitive
---    it "can find by case-insensitive name" $ do
---      Lib1.findTableByName D.database "employEEs" `shouldBe` Just (snd D.tableEmployees)
+    it "can find by case-insensitive name" $ do
+      Lib1.findTableByName D.database "employEEs" `shouldBe` Just (snd D.tableEmployees)
   describe "Lib1.parseSelectAllStatement" $ do
     it "handles empty input" $ do
       Lib1.parseSelectAllStatement "" `shouldSatisfy` isLeft
@@ -39,13 +38,13 @@ main = hspec $ do
       Lib1.renderDataFrameAsTable 100 (snd D.tableEmployees) `shouldSatisfy` not . null
   describe "Lib2.parseStatement" $ do
     it "parses a show tables statement" $ do
-      Lib2.parseStatement "SHOW TABLES;" `shouldSatisfy` isRight
+      Lib2.parseStatement "SHOW TABLES;" `shouldBe` Right (ShowTableStatement {showTableArgs = Nothing})
     it "parses a show tables statement case insensitively" $ do
-      Lib2.parseStatement "ShoW TAbLeS;" `shouldSatisfy` isRight
+      Lib2.parseStatement "ShoW TAbLeS;" `shouldBe` Right (ShowTableStatement {showTableArgs = Nothing})
     it "parses a show table statement" $ do
-      Lib2.parseStatement "SHOW TABLE employees;" `shouldSatisfy` isRight
+      Lib2.parseStatement "SHOW TABLE employees;" `shouldBe` Right (ShowTableStatement {showTableArgs = Just "employees"})
     it "parses a select statement with columns" $ do
-      Lib2.parseStatement "SELECT id, surname FROM employees;" `shouldSatisfy` isRight
+      Lib2.parseStatement "SELECT id, surname FROM employees;" `shouldBe` Right (SelectStatement {selectArgs = ["id"], fromArgs = "employees"})
     it "does not parse an invalid select statement" $ do
       Lib2.parseStatement "SLECT id, birthday FROM employees;" `shouldSatisfy` isLeft
     it "parses a max function" $ do
@@ -99,19 +98,28 @@ main = hspec $ do
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                           [[IntegerValue 3]])
-    it "executes a where or function with strings, = and >= comparison" $ do
-      case Lib2.parseStatement "SELECT * FROM duplicates WHERE x = y OR y >= x;" of 
+    it "does not execute a sum function with incorrect columns" $ do
+      case Lib2.parseStatement "SELECT SUM(name) FROM employees;" of
+        Left err -> err `shouldBe` err
+        Right ps -> Lib2.executeStatement ps `shouldSatisfy` isLeft
+    it "executes a where or function with strings, = comparison" $ do
+      case Lib2.parseStatement "SELECT * FROM duplicates WHERE x = 'a' OR y = 'a';" of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes4
     it "executes a where function with strings, <> comparison" $ do
       case Lib2.parseStatement "SELECT * FROM duplicates WHERE x <> y;" of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes5
-    it "executes a where function with strings, <= comparison, combined with sum" $ do
-      case Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= surname;" of 
+    it "executes a where or function with strings, >= comparison" $ do
+      case Lib2.parseStatement "SELECT id FROM employees WHERE 'a' >= 'b' OR name >= 'Z';" of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
-                                                                        [[NullValue]])
+                                                                        [])
+    it "executes a where or function with strings, <= comparison, combined with sum" $ do
+      case Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" of 
+        Left err -> err `shouldBe` "should have successfully parsed"
+        Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
+                                                                        [[IntegerValue 2]])
 
 testRes1 :: DataFrame
 testRes1 = DataFrame
@@ -147,7 +155,7 @@ testRes4 = DataFrame
     [
         [StringValue "a", StringValue "a"],
         [StringValue "a", StringValue "b"],
-        [StringValue "b", StringValue "b"]
+        [StringValue "b", StringValue "a"]
     ]
 
 testRes5 :: DataFrame
