@@ -2,7 +2,7 @@ import Data.Either
 import Data.Maybe ()
 import InMemoryTables qualified as D
 import Lib1
-import Lib2(ParsedStatement(..))
+import Lib2
 import DataFrame
 import Test.Hspec
 
@@ -38,13 +38,13 @@ main = hspec $ do
       Lib1.renderDataFrameAsTable 100 (snd D.tableEmployees) `shouldSatisfy` not . null
   describe "Lib2.parseStatement" $ do
     it "parses a show tables statement" $ do
-      Lib2.parseStatement "SHOW TABLES;" `shouldBe` Right (ShowTableStatement {showTableArgs = Nothing})
+      Lib2.parseStatement "SHOW TABLES;" `shouldBe` Lib2.aaaaa
     it "parses a show tables statement case insensitively" $ do
-      Lib2.parseStatement "ShoW TAbLeS;" `shouldBe` Right (ShowTableStatement {showTableArgs = Nothing})
+      Lib2.parseStatement "ShoW TAbLeS;" `shouldBe` Lib2.aaaaa
     it "parses a show table statement" $ do
-      Lib2.parseStatement "SHOW TABLE employees;" `shouldBe` Right (ShowTableStatement {showTableArgs = Just "employees"})
+      Lib2.parseStatement "SHOW TABLE employees;" `shouldBe` Lib2.aaaa
     it "parses a select statement with columns" $ do
-      Lib2.parseStatement "SELECT id, surname FROM employees;" `shouldBe` Right (SelectStatement {selectArgs = ["id"], fromArgs = "employees"})
+      Lib2.parseStatement "SELECT id, surname FROM employees;" `shouldBe` Lib2.aaa
     it "does not parse an invalid select statement" $ do
       Lib2.parseStatement "SLECT id, birthday FROM employees;" `shouldSatisfy` isLeft
     it "parses a max function" $ do

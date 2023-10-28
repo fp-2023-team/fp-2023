@@ -415,3 +415,12 @@ combineColumnsWithValues columns rows = zip columns $ transpose rows
 -- Unzips row values by column
 uncombineColumnsFromValues :: [(a, [b])] -> ([a], [[b]])
 uncombineColumnsFromValues mapped = (fst $ unzip mapped, transpose $ snd $ unzip mapped)
+
+aaaaa :: Either ErrorMessage ParsedStatement
+aaaaa = Right (ShowTableStatement {showTableArgs = Nothing})
+
+aaaa :: Either ErrorMessage ParsedStatement
+aaaa = Right (ShowTableStatement {showTableArgs = Just "employees"})
+
+aaa :: Either ErrorMessage ParsedStatement
+aaa = Right (SelectStatement {selectArgs = [Right "id"], fromArgs = "employees", whereArgs = []})
