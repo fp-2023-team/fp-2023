@@ -172,5 +172,7 @@ parseTest 6 = Right (SelectStatement {selectArgs = [Right ("id", dummy1)], fromA
 parseTest _ = Left "error"
 
 dummy1 :: [Value] -> Value
+dummy1 _ = NullValue
 
 dummy2 :: String -> String -> Bool
+dummy2 a b = True
