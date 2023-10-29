@@ -169,6 +169,8 @@ testRes5 = DataFrame
 instance Show ParsedStatement where
   show _ = "parsed statement"
 
+type ErrorMessage = String
+
 aaaaa :: Either ErrorMessage ParsedStatement
 aaaaa = Right (ShowTableStatement {showTableArgs = Nothing})
 
