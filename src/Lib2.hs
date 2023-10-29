@@ -1,9 +1,9 @@
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Lib2
   ( parseStatement,
     executeStatement,
-    ParsedStatement
+    ParsedStatement (..)
   )
 where
 
@@ -35,6 +35,7 @@ data ParsedStatement = SelectStatement {
         -- Either TABLES or TABLE name[, ...]
         showTableArgs :: Maybe String
     }
+    deriving (Eq)
 
 -- Functions to implement
 max :: [Value] -> Value
@@ -415,3 +416,11 @@ combineColumnsWithValues columns rows = zip columns $ transpose rows
 -- Unzips row values by column
 uncombineColumnsFromValues :: [(a, [b])] -> ([a], [[b]])
 uncombineColumnsFromValues mapped = (fst $ unzip mapped, transpose $ snd $ unzip mapped)
+
+instance Eq ([Value] -> Value) where
+  a == b = True
+  a /= b = False
+
+instance Eq (String -> String -> Bool) where
+  a == b = True
+  a /= b = False

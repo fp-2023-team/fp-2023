@@ -39,31 +39,29 @@ main = hspec $ do
       Lib1.renderDataFrameAsTable 100 (snd D.tableEmployees) `shouldSatisfy` not . null
   describe "Lib2.parseStatement" $ do
     it "parses a show tables statement" $ do
-      Lib2.parseStatement "SHOW TABLES;" `shouldSatisfy` isRight
+      Lib2.parseStatement "SHOW TABLES;" `shouldBe` (parseTest 0)
     it "parses a show tables statement case insensitively" $ do
-      Lib2.parseStatement "ShoW TAbLeS;" `shouldSatisfy` isRight
+      Lib2.parseStatement "ShoW TAbLeS;" `shouldBe` (parseTest 0)
     it "parses a show table statement" $ do
-      Lib2.parseStatement "SHOW TABLE employees;" `shouldSatisfy` isRight
+      Lib2.parseStatement "SHOW TABLE employees;" `shouldBe` (parseTest 1)
     it "parses a select statement with columns" $ do
-      Lib2.parseStatement "SELECT id, surname FROM employees;" `shouldSatisfy` isRight
+      Lib2.parseStatement "SELECT id, surname FROM employees;" `shouldBe` (parseTest 2)
     it "does not parse an invalid select statement" $ do
       Lib2.parseStatement "SLECT id, birthday FROM employees;" `shouldSatisfy` isLeft
     it "parses a max function" $ do
-      Lib2.parseStatement "SELECT MAX(id) FROM employees;" `shouldSatisfy` isRight
+      Lib2.parseStatement "SELECT MAX(id) FROM employees;" `shouldBe` (parseTest 3)
     it "does not parse an invalid max function" $ do
       Lib2.parseStatement "SELECT MAaX(id) FROM employees;" `shouldSatisfy` isLeft
     it "parses a sum function" $ do
-      Lib2.parseStatement "SELECT SUM(id) FROM employees;" `shouldSatisfy` isRight
+      Lib2.parseStatement "SELECT SUM(id) FROM employees;" `shouldBe` (parseTest 3)
     it "does not parse an invalid sum function" $ do
       Lib2.parseStatement "SELECT SUMN(id) FROM employees;" `shouldSatisfy` isLeft
-    it "parses a where or function with strings, = comparison" $ do
-      Lib2.parseStatement "SELECT * FROM duplicates WHERE x = 'a' OR y = 'a';" `shouldSatisfy` isRight
+    it "parses a where or function with strings, = and >= comparison" $ do
+      Lib2.parseStatement "SELECT * FROM duplicates WHERE x = y OR y >= x;" `shouldBe` (parseTest 4)
     it "parses a where function with strings, <> comparison" $ do
-      Lib2.parseStatement "SELECT * FROM duplicates WHERE x <> y;" `shouldSatisfy` isRight
-    it "parses a where or function with strings, >= comparison" $ do
-      Lib2.parseStatement "SELECT * FROM employees WHERE id >= 2 OR name >= 'Va';" `shouldSatisfy` isRight
-    it "parses a where or function with strings, <= comparison, combined with sum" $ do
-      Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" `shouldSatisfy` isRight
+      Lib2.parseStatement "SELECT * FROM duplicates WHERE x <> y;" `shouldBe` (parseTest 5)
+    it "parses a where function with strings, <= comparison, combined with sum" $ do
+      Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= surname;" `shouldBe` (parseTest 6)
   describe "Lib2.executeStatement" $ do
     it "executes a show tables statement" $ do
       case Lib2.parseStatement "SHOW TABLES;" of 
@@ -160,3 +158,19 @@ testRes5 = DataFrame
 
 instance Show ParsedStatement where
   show _ = "parsed statement"
+
+type ErrorMessage = String
+
+parseTest :: Int -> Either ErrorMessage ParsedStatement
+parseTest 0 = Right (ShowTableStatement {showTableArgs = Nothing})
+parseTest 1 = Right (ShowTableStatement {showTableArgs = Just "employees"})
+parseTest 2 = Right (SelectStatement {selectArgs = [Right "id", Right "surname"], fromArgs = "employees", whereArgs = []})
+parseTest 3 = Right (SelectStatement {selectArgs = [Left ("id", dummy1)], fromArgs = "employees", whereArgs = []})
+parseTest 4 = Right (SelectStatement {selectArgs = [Right "*"], fromArgs = "duplicates", whereArgs = [("x", "y", dummy2), ("y", "x", dummy2)]})
+parseTest 5 = Right (SelectStatement {selectArgs = [Right "*"], fromArgs = "duplicates", whereArgs = [("x", "y", dummy2)]})
+parseTest 6 = Right (SelectStatement {selectArgs = [Right ("id", dummy1)], fromArgs = "employees", whereArgs = [("name", "surname", dummy2)]})
+parseTest _ = Left "error"
+
+dummy1 :: [Value] -> Value
+
+dummy2 :: String -> String -> Bool
