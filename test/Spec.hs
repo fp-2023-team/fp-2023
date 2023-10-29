@@ -168,7 +168,7 @@ parseTest 2 = Right (SelectStatement {selectArgs = [Right "id", Right "surname"]
 parseTest 3 = Right (SelectStatement {selectArgs = [Left ("id", dummy1)], fromArgs = "employees", whereArgs = []})
 parseTest 4 = Right (SelectStatement {selectArgs = [Right "*"], fromArgs = "duplicates", whereArgs = [("x", "y", dummy2), ("y", "x", dummy2)]})
 parseTest 5 = Right (SelectStatement {selectArgs = [Right "*"], fromArgs = "duplicates", whereArgs = [("x", "y", dummy2)]})
-parseTest 6 = Right (SelectStatement {selectArgs = [Right ("id", dummy1)], fromArgs = "employees", whereArgs = [("name", "surname", dummy2)]})
+parseTest 6 = Right (SelectStatement {selectArgs = [Left ("id", dummy1)], fromArgs = "employees", whereArgs = [("name", "surname", dummy2)]})
 parseTest _ = Left "error"
 
 dummy1 :: [Value] -> Value
