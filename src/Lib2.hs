@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module Lib2
   ( parseStatement,
