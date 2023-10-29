@@ -35,6 +35,7 @@ data ParsedStatement = SelectStatement {
         -- Either TABLES or TABLE name[, ...]
         showTableArgs :: Maybe String
     }
+    deriving (Eq)
 
 -- Functions to implement
 max :: [Value] -> Value
@@ -424,3 +425,11 @@ aaaa = Right (ShowTableStatement {showTableArgs = Just "employees"})
 
 aaa :: Either ErrorMessage ParsedStatement
 aaa = Right (SelectStatement {selectArgs = [Right "id"], fromArgs = "employees", whereArgs = []})
+
+instance Eq ([Value] -> Value) where
+  a == b = True
+  a /= b = False
+
+instance Eq (String -> String -> Bool) where
+  a == b = True
+  a /= b = False
