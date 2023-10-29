@@ -38,13 +38,13 @@ main = hspec $ do
       Lib1.renderDataFrameAsTable 100 (snd D.tableEmployees) `shouldSatisfy` not . null
   describe "Lib2.parseStatement" $ do
     it "parses a show tables statement" $ do
-      Lib2.parseStatement "SHOW TABLES;" `shouldBe` Lib2.aaaaa
+      Lib2.parseStatement "SHOW TABLES;" `shouldBe` aaaaa
     it "parses a show tables statement case insensitively" $ do
-      Lib2.parseStatement "ShoW TAbLeS;" `shouldBe` Lib2.aaaaa
+      Lib2.parseStatement "ShoW TAbLeS;" `shouldBe` aaaaa
     it "parses a show table statement" $ do
-      Lib2.parseStatement "SHOW TABLE employees;" `shouldBe` Lib2.aaaa
+      Lib2.parseStatement "SHOW TABLE employees;" `shouldBe` aaaa
     it "parses a select statement with columns" $ do
-      Lib2.parseStatement "SELECT id, surname FROM employees;" `shouldBe` Lib2.aaa
+      Lib2.parseStatement "SELECT id, surname FROM employees;" `shouldBe` aaa
     it "does not parse an invalid select statement" $ do
       Lib2.parseStatement "SLECT id, birthday FROM employees;" `shouldSatisfy` isLeft
     it "parses a max function" $ do
@@ -168,3 +168,12 @@ testRes5 = DataFrame
 
 instance Show ParsedStatement where
   show _ = "parsed statement"
+
+aaaaa :: Either ErrorMessage ParsedStatement
+aaaaa = Right (ShowTableStatement {showTableArgs = Nothing})
+
+aaaa :: Either ErrorMessage ParsedStatement
+aaaa = Right (ShowTableStatement {showTableArgs = Just "employees"})
+
+aaa :: Either ErrorMessage ParsedStatement
+aaa = Right (SelectStatement {selectArgs = [Right "id"], fromArgs = "employees", whereArgs = []})
