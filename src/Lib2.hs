@@ -447,3 +447,10 @@ instance Eq ([Value] -> Value) where
 instance Eq (String -> String -> Bool) where
   a == b = True
   a /= b = False
+
+instance Eq WhereOperand where
+  Constant a == Constant b = a == b
+  ColumnName a == ColumnName b = a == b
+  Constant _ == ColumnName _ = False
+  ColumnName _ == Constant _ = False
+  a /= b = not (a == b)

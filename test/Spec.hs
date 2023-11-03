@@ -56,12 +56,14 @@ main = hspec $ do
       Lib2.parseStatement "SELECT SUM(id) FROM employees;" `shouldBe` (parseTest 3)
     it "does not parse an invalid sum function" $ do
       Lib2.parseStatement "SELECT SUMN(id) FROM employees;" `shouldSatisfy` isLeft
-    it "parses a where or function with strings, = and >= comparison" $ do
-      Lib2.parseStatement "SELECT * FROM duplicates WHERE x = y OR y >= x;" `shouldBe` (parseTest 4)
+    it "parses a where or function with strings, = comparison" $ do
+      Lib2.parseStatement "SELECT * FROM duplicates WHERE x = 'a' OR y = 'a';" `shouldBe` (parseTest 4)
     it "parses a where function with strings, <> comparison" $ do
       Lib2.parseStatement "SELECT * FROM duplicates WHERE x <> y;" `shouldBe` (parseTest 5)
-    it "parses a where function with strings, <= comparison, combined with sum" $ do
-      Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= surname;" `shouldBe` (parseTest 6)
+    it "parses executes a where or function with strings, >= comparison" $ do
+      Lib2.parseStatement "SELECT id FROM employees WHERE 'a' >= 'b' OR name >= 'Z';" `shouldBe` (parseTest 6)
+    it "parses a where or function with strings, <= comparison, combined with sum" $ do
+      Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" `shouldBe` (parseTest 7)
   describe "Lib2.executeStatement" $ do
     it "executes a show tables statement" $ do
       case Lib2.parseStatement "SHOW TABLES;" of 
@@ -97,19 +99,24 @@ main = hspec $ do
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                           [[IntegerValue 3]])
-    it "executes a where or function with strings, = and >= comparison" $ do
-      case Lib2.parseStatement "SELECT * FROM duplicates WHERE x = y OR y >= x;" of 
+    it "executes a where or function with strings, = comparison" $ do
+      case Lib2.parseStatement "SELECT * FROM duplicates WHERE x = 'a' OR y = 'a';" of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes4
     it "executes a where function with strings, <> comparison" $ do
       case Lib2.parseStatement "SELECT * FROM duplicates WHERE x <> y;" of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes5
-    it "executes a where function with strings, <= comparison, combined with sum" $ do
-      case Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= surname;" of 
+    it "executes a where or function with strings, >= comparison" $ do
+      case Lib2.parseStatement "SELECT id FROM employees WHERE 'a' >= 'b' OR name >= 'Z';" of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
-                                                                        [[NullValue]])
+                                                                        [])
+    it "executes a where or function with strings, <= comparison, combined with sum" $ do
+      case Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" of 
+        Left err -> err `shouldBe` "should have successfully parsed"
+        Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
+                                                                        [[IntegerValue 2]])
 
 testRes1 :: DataFrame
 testRes1 = DataFrame
@@ -145,7 +152,7 @@ testRes4 = DataFrame
     [
         [StringValue "a", StringValue "a"],
         [StringValue "a", StringValue "b"],
-        [StringValue "b", StringValue "b"]
+        [StringValue "b", StringValue "a"]
     ]
 
 testRes5 :: DataFrame
@@ -166,9 +173,10 @@ parseTest 0 = Right (ShowTableStatement {showTableArgs = Nothing})
 parseTest 1 = Right (ShowTableStatement {showTableArgs = Just "employees"})
 parseTest 2 = Right (SelectStatement {selectArgs = [Right "id", Right "surname"], fromArgs = "employees", whereArgs = []})
 parseTest 3 = Right (SelectStatement {selectArgs = [Left ("id", dummy1)], fromArgs = "employees", whereArgs = []})
-parseTest 4 = Right (SelectStatement {selectArgs = [Right "*"], fromArgs = "duplicates", whereArgs = [("x", "y", dummy2), ("y", "x", dummy2)]})
-parseTest 5 = Right (SelectStatement {selectArgs = [Right "*"], fromArgs = "duplicates", whereArgs = [("x", "y", dummy2)]})
-parseTest 6 = Right (SelectStatement {selectArgs = [Left ("id", dummy1)], fromArgs = "employees", whereArgs = [("name", "surname", dummy2)]})
+parseTest 4 = Right (SelectStatement {selectArgs = [Right "*"], fromArgs = "duplicates", whereArgs = [(ColumnName "x", Constant "'a'", dummy2), (ColumnName "y", Constant "'a'", dummy2)]})
+parseTest 5 = Right (SelectStatement {selectArgs = [Right "*"], fromArgs = "duplicates", whereArgs = [(ColumnName "x", ColumnName "y", dummy2)]})
+parseTest 6 = Right (SelectStatement {selectArgs = [Right "id"], fromArgs = "employees", whereArgs = [(Constant "'a'", Constant "'b'", dummy2), (ColumnName "name", Constant "'b'", dummy2)]})
+parseTest 7 = Right (SelectStatement {selectArgs = [Left ("id", dummy1)], fromArgs = "employees", whereArgs = [(ColumnName "name", Constant "'E'", dummy2), (ColumnName "surname", Constant "'E'", dummy2)]})
 parseTest _ = Left "error"
 
 dummy1 :: [Value] -> Value
