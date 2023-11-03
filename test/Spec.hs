@@ -111,7 +111,7 @@ main = hspec $ do
       case Lib2.parseStatement "SELECT id FROM employees WHERE 'a' >= 'b' OR name >= 'Z';" of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
-                                                                        [])
+                                                                        [[NullValue]])
     it "executes a where or function with strings, <= comparison, combined with sum" $ do
       case Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" of 
         Left err -> err `shouldBe` "should have successfully parsed"
@@ -173,10 +173,10 @@ parseTest 0 = Right (ShowTableStatement {showTableArgs = Nothing})
 parseTest 1 = Right (ShowTableStatement {showTableArgs = Just "employees"})
 parseTest 2 = Right (SelectStatement {selectArgs = [Right "id", Right "surname"], fromArgs = "employees", whereArgs = []})
 parseTest 3 = Right (SelectStatement {selectArgs = [Left ("id", dummy1)], fromArgs = "employees", whereArgs = []})
-parseTest 4 = Right (SelectStatement {selectArgs = [Right "*"], fromArgs = "duplicates", whereArgs = [(ColumnName "x", Constant "'a'", dummy2), (ColumnName "y", Constant "'a'", dummy2)]})
+parseTest 4 = Right (SelectStatement {selectArgs = [Right "*"], fromArgs = "duplicates", whereArgs = [(ColumnName "x", Constant "a", dummy2), (ColumnName "y", Constant "a", dummy2)]})
 parseTest 5 = Right (SelectStatement {selectArgs = [Right "*"], fromArgs = "duplicates", whereArgs = [(ColumnName "x", ColumnName "y", dummy2)]})
-parseTest 6 = Right (SelectStatement {selectArgs = [Right "id"], fromArgs = "employees", whereArgs = [(Constant "'a'", Constant "'b'", dummy2), (ColumnName "name", Constant "'b'", dummy2)]})
-parseTest 7 = Right (SelectStatement {selectArgs = [Left ("id", dummy1)], fromArgs = "employees", whereArgs = [(ColumnName "name", Constant "'E'", dummy2), (ColumnName "surname", Constant "'E'", dummy2)]})
+parseTest 6 = Right (SelectStatement {selectArgs = [Right "id"], fromArgs = "employees", whereArgs = [(Constant "a", Constant "b", dummy2), (ColumnName "name", Constant "Z", dummy2)]})
+parseTest 7 = Right (SelectStatement {selectArgs = [Left ("id", dummy1)], fromArgs = "employees", whereArgs = [(ColumnName "name", Constant "E", dummy2), (ColumnName "surname", Constant "E", dummy2)]})
 parseTest _ = Left "error"
 
 dummy1 :: [Value] -> Value
