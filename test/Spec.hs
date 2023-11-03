@@ -184,5 +184,3 @@ dummy1 _ = NullValue
 
 dummy2 :: String -> String -> Bool
 dummy2 a b = True
-
-data Lib2.WhereOperand = Constant String | ColumnName String deriving Show
