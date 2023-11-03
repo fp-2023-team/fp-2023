@@ -15,9 +15,8 @@ import Lib1
 import Data.Either (Either(Right))
 
 type ErrorMessage = String
-type Constant = String
-type Tablename = String
 type Database = [(TableName, DataFrame)]
+type WhereOperator = (String -> String -> Bool)
 
 -- Keep the type, modify constructors
 data ParsedStatement = SelectStatement {
@@ -28,14 +27,14 @@ data ParsedStatement = SelectStatement {
         fromArgs :: String, --One table for now
         -- All 'where' args are column_name0 ?=? column_name1 ORed
         --whereArgs :: [(String, String, Value -> Value -> Bool)]
-        whereArgs :: [(WhereOperand, WhereOperand, String -> String -> Bool)]
+        whereArgs :: [(WhereOperand, WhereOperand, WhereOperator)]
     }
     | ShowTableStatement {
         -- Either TABLES or TABLE name[, ...]
         showTableArgs :: Maybe String
     }
 
-data WhereOperand = Constant String | Collumname String deriving Show
+data WhereOperand = Constant String | ColumnName String deriving Show
 
 -- Functions to implement
 max :: [Value] -> Value
@@ -192,7 +191,7 @@ parseSelect x = do
                             ("", sym, xs2) -> parseOperator (Constant x1, sym, xs2) b
                             (x2, _, _) -> Left $ "Unexpected " ++ x2 ++ " after " ++ x1 
                         | otherwise -> Left $ "Unexpected \' after " ++ x  
-          (x, sym, xs) -> parseOperator (Collumname x, sym, xs) b
+          (x, sym, xs) -> parseOperator (ColumnName x, sym, xs) b
           where
             parseOperator :: (WhereOperand, Char, String) -> ParsedStatement -> Either ErrorMessage ParsedStatement
             parseOperator (x1, sym, _) _ | elem sym ",()" = Left $ "Unexpected " ++ [sym] ++ " after " ++ show x1
@@ -231,7 +230,7 @@ parseSelect x = do
                                | otherwise -> Left $ "Unrecognised statement: " ++ x1
                 (x2, sym, _) -> Left $ "Mega Unexpected " ++ [sym] ++ " after " ++ x2
             | otherwise -> Left $ "Unexpected \' after " ++ x  
-          (x, ';', _) | x /= "" -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = [(a, Collumname x, func)] }
+          (x, ';', _) | x /= "" -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = [(a, ColumnName x, func)] }
                       | otherwise -> Left "Missing second operand"
           (x, ' ', xs) -> case (parseKeyword xs) of
             Left e -> Left e
@@ -239,7 +238,7 @@ parseSelect x = do
               then if (xs1 /= "")
                 then case (parseWhereArgs' (xs1, statement)) of
                   Left e -> Left e
-                  Right parseRes -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = (a, Collumname x, func) : (whereArgs parseRes)}
+                  Right parseRes -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = (a, ColumnName x, func) : (whereArgs parseRes)}
                 else Left $ "Missing statement after " ++ x1 
               else Left $ "Unrecognised statement: " ++ x1
           (x, sym, _) -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
@@ -311,127 +310,131 @@ parseCompare _ _ = False
 -- Executes a parsed statemet. Produces a DataFrame. Uses
 -- InMemoryTables.databases a source of data.
 executeStatement :: ParsedStatement -> Either ErrorMessage DataFrame
-executeStatement _ = Left "Execute statement under renovation"
--- executeStatement (SelectStatement selectArgs' fromArgs' whereArgs') = case findTableByName database fromArgs' of
---     Nothing -> Left $ "Could not find table " ++ fromArgs'
---     -- If the table was found,
---     Just table@(DataFrame columns _) ->
---         -- Ensure we have some select columns
---         if (null selectColumnNames) then
---             Left $ "Got zero columns to select"
---         -- Ensure select only has selection by column value or only by function
---         else if (any (isLeft) selectArgs' && any(isRight) selectArgs') then
---             Left $ "Cannot select by column value and by function at the same time"
---         -- Wildcard only once
---         else if (let (x:xs) = selectColumnNames in x == "*" && not (null xs)) then
---             Left $ "Can only select all columns once"
---         -- Cannot use wildcard with functions
---         else if (let (x:xs) = selectColumnNames in x == "*" && not (null (getOnlyLefts selectArgs'))) then
---             Left $ "Cannot apply function to wildcard"
---         -- Check if the column names mentioned in the selection arguments actually exist,
---         -- fall-through for wildcard
---         else if (((intersect selectColumnNames tableColumnNames /= selectColumnNames)
---                     || (intersect whereColumnNames tableColumnNames /= whereColumnNames))
---                 && not (let (x:xs) = selectColumnNames in x == "*" && null xs)) then
---             Left $ "Statement references columns which do not exist in table"
---         -- Ensure comparisons are done between string type columns only
---         else if (any
---                 (\(columnName1, columnName2, _) -> getColumnTypeByName columns columnName1 /= Just StringType
---                     || getColumnTypeByName columns columnName2 /= Just StringType)
---                 whereArgs') then
---             Left $ "Only comparisons between string type columns are allowed in `where`"
---         -- Finally print the table
---         else do
---             let DataFrame columns' rows' = createFilteredTable table whereArgs'
---             let columnValues = combineColumnsWithValues columns' (if null rows' then [map (\x -> NullValue) columns'] else rows') -- [(Column, [Value])]
---             -- Check for wildcard, too
---             let selectArgs'' = let (x:_) = selectColumnNames in if x == "*" then [Right columnName | columnName <- tableColumnNames] else selectArgs'
---             case selectArgs'' of
---                 -- If selectArgs'' is Left, then it's (String, [Value] -> Value)
---                 (Left _:_) -> do
---                     let columnNamesAndFunctions = getOnlyLefts selectArgs''
---                     -- Check if column names match and apply functions
---                     let resultColumnValues = [(Column colName colType, [func $ values]) | (name, func) <- columnNamesAndFunctions, (Column colName colType, values) <- columnValues, name == colName]
---                     let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
---                     Right $ DataFrame (fst resultColumnsRows) (snd resultColumnsRows)
---                 -- If selectArgs'' is Right, then it's only String
---                 (Right _:_) -> do
---                     let columnNames = getOnlyRights selectArgs''
---                     -- Check if column names match
---                     let resultColumnValues = [columnValue | columnName <- columnNames, columnValue@(Column name _, _) <- columnValues, columnName == name]
---                     let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
---                     Right $ DataFrame (fst resultColumnsRows) (snd resultColumnsRows) 
---                 _ -> Left $ "Empty select list"
---         where
---             tableColumnNames :: [String]
---             tableColumnNames = [ columnName | Column columnName _ <- columns ]
---             selectColumnNames :: [String]
---             selectColumnNames = map (getSelectColumnName) selectArgs'
---                 where
---                     getSelectColumnName :: Either (String, [Value] -> Value) String -> String
---                     getSelectColumnName (Right str) = str
---                     getSelectColumnName (Left (str, _)) = str
---             whereColumnNames :: [String]
---             whereColumnNames = getWhereColumnNames whereArgs' []
---                 where
---                     getWhereColumnNames :: [(String, String, String -> String -> Bool)]
---                             -> [String] -> [String]
---                     getWhereColumnNames [] result = result
---                     getWhereColumnNames ((columnName1, columnName2, _):xs) result =
---                         getWhereColumnNames xs (columnName1:columnName2:result)
--- executeStatement (ShowTableStatement showTableArgs') = case showTableArgs' of
---     Nothing -> Right $ DataFrame
---         [ Column "table_name" StringType ]
---         [ [ StringValue (fst table) ] | table <- database ]
---     Just tableName -> maybe (Left $ "Could not find table " ++ tableName)
---         (\(DataFrame cols _) -> Right $ DataFrame
---             [Column "column_name" StringType, Column "column_type" StringType]
---             [[StringValue name, StringValue $ show colType] | Column name colType <- cols])
---         (findTableByName database tableName)
+executeStatement (SelectStatement selectArgs' fromArgs' whereArgs') = case findTableByName database fromArgs' of
+    Nothing -> Left $ "Could not find table " ++ fromArgs'
+    -- If the table was found,
+    Just table@(DataFrame columns rows) ->
+        -- Ensure we have some select columns
+        if (null selectColumnNames) then
+            Left $ "Got zero columns to select"
+        -- Ensure select only has selection by column value or only by function
+        else if (any (isLeft) selectArgs' && any(isRight) selectArgs') then
+            Left $ "Cannot select by column value and by function at the same time"
+        -- Wildcard only once
+        else if (let (x:xs) = selectColumnNames in x == "*" && not (null xs)) then
+            Left $ "Can only select all columns once"
+        -- Cannot use wildcard with functions
+        else if (let (x:xs) = selectColumnNames in x == "*" && not (null (getOnlyLefts selectArgs'))) then
+            Left $ "Cannot apply function to wildcard"
+        ---- Check if the column names mentioned in the selection arguments actually exist,
+        ---- fall-through for wildcard
+        else if ((intersect selectColumnNames tableColumnNames /= selectColumnNames)
+                        && not (let (x:xs) = selectColumnNames in x == "*" && null xs)
+                || (intersect whereColumnNames tableColumnNames /= whereColumnNames))
+        then
+            Left $ "Statement references columns which do not exist in table"
+        -- Ensure comparisons are done between string type columns and constants only
+        else if (any
+                (\(operand1, operand2, _) -> (not $ whereColumnIsStringType columns operand1)
+                    || (not $ whereColumnIsStringType columns operand2))
+                whereArgs') then
+            Left $ "Only comparisons between string type columns and constants are allowed in `where`"
+        -- Finally print the table
+        else do
+            let DataFrame columns' rows' = createFilteredTable table whereArgs'
+            let columnValues = combineColumnsWithValues columns' (if null rows' then [map (\x -> NullValue) columns'] else rows') -- [(Column, [Value])]
+            -- Check for wildcard, too
+            let selectArgs'' = let (x:_) = selectColumnNames in if x == "*" then [Right columnName | columnName <- tableColumnNames] else selectArgs'
+            case selectArgs'' of
+                -- If selectArgs'' is Left, then it's (String, [Value] -> Value)
+                (Left _:_) -> do
+                    let columnNamesAndFunctions = getOnlyLefts selectArgs''
+                    -- Check if column names match and apply functions
+                    let resultColumnValues = [(Column colName colType, [func $ values]) | (name, func) <- columnNamesAndFunctions, (Column colName colType, values) <- columnValues, name == colName]
+                    let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
+                    Right $ DataFrame (fst resultColumnsRows) (snd resultColumnsRows)
+                -- If selectArgs'' is Right, then it's only String
+                (Right _:_) -> do
+                    let columnNames = getOnlyRights selectArgs''
+                    -- Check if column names match
+                    let resultColumnValues = [columnValue | columnName <- columnNames, columnValue@(Column name _, _) <- columnValues, columnName == name]
+                    let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
+                    Right $ DataFrame (fst resultColumnsRows) (snd resultColumnsRows) 
+                _ -> Left $ "Empty select list"
+        where
+            tableColumnNames :: [String]
+            tableColumnNames = [ columnName | Column columnName _ <- columns ]
+            selectColumnNames :: [String]
+            selectColumnNames = map (getSelectColumnName) selectArgs'
+                where
+                    getSelectColumnName :: Either (String, [Value] -> Value) String -> String
+                    getSelectColumnName (Right str) = str
+                    getSelectColumnName (Left (str, _)) = str
+            whereColumnNames :: [String]
+            whereColumnNames = concat [[a | (ColumnName a, _, _) <- whereArgs'],
+                [b | (_, ColumnName b, _) <- whereArgs']]
+executeStatement (ShowTableStatement showTableArgs') = case showTableArgs' of
+    Nothing -> Right $ DataFrame
+        [ Column "table_name" StringType ]
+        [ [ StringValue (fst table) ] | table <- database ]
+    Just tableName -> maybe (Left $ "Could not find table " ++ tableName)
+        (\(DataFrame cols _) -> Right $ DataFrame
+            [Column "column_name" StringType, Column "column_type" StringType]
+            [[StringValue name, StringValue $ show colType] | Column name colType <- cols])
+        (findTableByName database tableName)
 
--- getColumnTypeByName :: [Column] -> String -> Maybe ColumnType
--- getColumnTypeByName cols name = do
---     (Column _ colType) <- find (\(Column colName _) -> colName == name) cols
---     return colType
+whereColumnIsStringType :: [Column] -> WhereOperand -> Bool
+whereColumnIsStringType columns (ColumnName columnName) = getColumnTypeByName columns columnName == Just StringType
+    where
+        getColumnTypeByName :: [Column] -> String -> Maybe ColumnType
+        getColumnTypeByName cols name = do
+            (Column _ colType) <- find (\(Column colName _) -> colName == name) cols
+            return colType
+whereColumnIsStringType _ _ = True
 
--- nullOrAny :: (Foldable t) => (a -> Bool) -> t a -> Bool
--- nullOrAny f x = null x || any f x
+nullOrAny :: (Foldable t) => (a -> Bool) -> t a -> Bool
+nullOrAny f x = null x || any f x
 
--- -- Applies where filters and column selection to a table, creating a new table
--- createFilteredTable :: DataFrame
---     -> [(String, String, String -> String -> Bool)]
---     -> DataFrame
--- createFilteredTable (DataFrame columns rows) whereArgs' = DataFrame columns filteredRows
---     where
---         -- Give row values their column name
---         namedRows :: [[(String, Value)]]
---         namedRows = [zip [columnName | (Column columnName _) <- columns] row | row <- rows]
---         -- Apply where filter to rows
---         filteredNamedRows :: [[(String, Value)]]
---         filteredNamedRows = [ namedValues | namedValues <- namedRows,
---             nullOrAny
---                 (\(colName1, colName2, op) -> op (getStringValue $ lookup colName1 namedValues)
---                 (getStringValue $ lookup colName2 namedValues)) whereArgs']
---             where
---                 getStringValue :: Maybe Value -> String
---                 getStringValue (Just (StringValue string)) = string
---                 getStringValue _ = ""
---         -- Finally remove column names from row values
---         filteredRows :: [Row]
---         filteredRows = [snd $ unzip namedValues | namedValues <- filteredNamedRows]
+-- Applies where filters and column selection to a table, creating a new table
+createFilteredTable :: DataFrame
+    -> [(WhereOperand, WhereOperand, String -> String -> Bool)]
+    -> DataFrame
+createFilteredTable (DataFrame columns rows) whereArgs' = DataFrame columns filteredRows
+    where
+        -- Give row values their column name
+        namedRows :: [[(String, Value)]]
+        namedRows = [zip [columnName | (Column columnName _) <- columns] row | row <- rows]
+        -- Apply where filter to rows
+        filteredNamedRows :: [[(String, Value)]]
+        filteredNamedRows = [ namedValues | namedValues <- namedRows,
+            nullOrAny
+                (\(whereOperand1, whereOperand2, operator) -> operator
+                    (getStringValue namedValues whereOperand1)
+                    (getStringValue namedValues whereOperand2))
+                whereArgs']
+            where
+                getStringValue :: [(String, Value)] -> WhereOperand -> String
+                getStringValue _ (Constant string) = string
+                getStringValue namedValues (ColumnName name) = case lookup name namedValues of
+                    Just (StringValue string) -> string
+                    _ -> ""
+        -- Finally remove column names from row values
+        filteredRows :: [Row]
+        filteredRows = [snd $ unzip namedValues | namedValues <- filteredNamedRows]
 
--- -- Culls a list of Either from Right elements
--- getOnlyLefts :: [Either a b] -> [a]
--- getOnlyLefts list = [val | Left val <- list]
 
--- -- Culls a list of Either from Left elements
--- getOnlyRights :: [Either a b] -> [b]
--- getOnlyRights list = [val | Right val <- list]
+-- Culls a list of Either from Right elements
+getOnlyLefts :: [Either a b] -> [a]
+getOnlyLefts list = [val | Left val <- list]
 
--- -- Zips row values by column
--- combineColumnsWithValues :: [a] -> [[b]] -> [(a, [b])]
--- combineColumnsWithValues columns rows = zip columns $ transpose rows
+-- Culls a list of Either from Left elements
+getOnlyRights :: [Either a b] -> [b]
+getOnlyRights list = [val | Right val <- list]
 
--- -- Unzips row values by column
--- uncombineColumnsFromValues :: [(a, [b])] -> ([a], [[b]])
--- uncombineColumnsFromValues mapped = (fst $ unzip mapped, transpose $ snd $ unzip mapped)
+-- Zips row values by column
+combineColumnsWithValues :: [a] -> [[b]] -> [(a, [b])]
+combineColumnsWithValues columns rows = zip columns $ transpose rows
+
+-- Unzips row values by column
+uncombineColumnsFromValues :: [(a, [b])] -> ([a], [[b]])
+uncombineColumnsFromValues mapped = (fst $ unzip mapped, transpose $ snd $ unzip mapped)
