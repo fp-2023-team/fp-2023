@@ -214,7 +214,7 @@ parseSelect x = do
             | x == "" -> case (parseConstant xs) of
               ("", _) -> Left "Constant can not be emtpy"
               (x1, xs1) -> case (parseWord xs1) of
-                (x2, ';', _) | x2 /= "" -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = [(a, Constant x1, func)] }
+                (x2, ';', _)  | x2 == "" -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = [(a, Constant x1, func)] }
                               | parseCompare x2 "or" -> Left $ "Missing statement after " ++ x2 
                               | otherwise -> Left $ "Unexpected " ++ x2 ++ " after " ++ x1  
                 (x2, ' ', xs2) | parseCompare x2 "or" -> if (xs2 /= "")
