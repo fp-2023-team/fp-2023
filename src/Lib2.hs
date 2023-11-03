@@ -222,8 +222,14 @@ parseSelect x = do
                                     Left e -> Left e
                                     Right parseRes -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = (a, Constant x1, func) : (whereArgs parseRes)}
                                   else Left $ "Missing statement after " ++ x2
-                                | otherwise -> Left $ "Unrecognised statement: " ++ x1
-                (x2, sym, _) -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x2
+                               | otherwise -> Left $ "Unrecognised statement: " ++ x1
+                (x2, '\'', xs2) | parseCompare x2 "or" -> if (xs2 /= "")
+                                  then case (parseWhereArgs' ('\'':xs2, statement)) of
+                                    Left e -> Left e
+                                    Right parseRes -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = (a, Constant x1, func) : (whereArgs parseRes)}
+                                  else Left $ "Missing statement after " ++ x2
+                               | otherwise -> Left $ "Unrecognised statement: " ++ x1
+                (x2, sym, _) -> Left $ "Mega Unexpected " ++ [sym] ++ " after " ++ x2
             | otherwise -> Left $ "Unexpected \' after " ++ x  
           (x, ';', _) | x /= "" -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = [(a, Collumname x, func)] }
                       | otherwise -> Left "Missing second operand"
