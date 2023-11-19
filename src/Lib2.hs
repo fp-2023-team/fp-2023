@@ -22,11 +22,11 @@ type WhereOperator = (String -> String -> Bool)
 -- Keep the type, modify constructors
 data ParsedStatement = SelectStatement {
         -- Either single max(column_name), sum(column_name) or list of column names
-        selectArgs :: [Either (String, [Value] -> Value) String],
+        --selectArgs :: [Either (String, [Value] -> Value) String],
+        selectArgs :: [Either FunctionWithArgs String],
         -- Table names
         fromArgs :: [String],
         -- All 'where' args are column_name0 ?=? column_name1 ORed
-        --whereArgs :: [(String, String, Value -> Value -> Bool)]
         whereArgs :: [(WhereOperand, WhereOperand, WhereOperator)]
     }
     | ShowTableStatement {
@@ -36,7 +36,16 @@ data ParsedStatement = SelectStatement {
     --deriving (Eq) IDK what this does just temporary this
 
 data WhereOperand = Constant String | ColumnName String deriving Show
-
+data FunctionWithArgs = Param0 {
+    --Function with 0 parameters
+    func0 :: Value
+  } 
+  | Param1 {
+    --Function with 1 parameter
+    func1 :: [Value] -> Value,
+    --Argument given to the function
+    arg :: String
+  } 
 -- Functions to implement
 max :: [Value] -> Value
 max values@(value:_) = case value of
@@ -79,6 +88,9 @@ sum values@(value:_) = case value of
                 NullValue
             else
                 IntegerValue $ Data.List.sum values'
+
+now :: String
+now = "End of time"
 
 equal :: String -> String -> Bool
 equal = (==)
