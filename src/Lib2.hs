@@ -22,8 +22,8 @@ type WhereOperator = (String -> String -> Bool)
 -- Keep the type, modify constructors
 data ParsedStatement = SelectStatement {
         -- Either single max(column_name), sum(column_name) or list of column names
-        --selectArgs :: [Either (String, [Value] -> Value) String],
-        selectArgs :: [Either FunctionWithArgs String],
+        --Right side: Maybe String = table name (optional), String = collumn name
+        selectArgs :: [Either ([(Maybe String, String)], Function) (Maybe String, String)],
         -- Table names
         fromArgs :: [String],
         -- All 'where' args are column_name0 ?=? column_name1 ORed
@@ -35,17 +35,15 @@ data ParsedStatement = SelectStatement {
     }
     --deriving (Eq) IDK what this does just temporary this
 
-data WhereOperand = Constant String | ColumnName String deriving Show
-data FunctionWithArgs = Param0 {
-    --Function with 0 parameters
-    func0 :: Value
-  } 
-  | Param1 {
-    --Function with 1 parameter
-    func1 :: [Value] -> Value,
-    --Argument given to the function
-    arg :: String
-  } 
+data WhereOperand = Constant String | ColumnName (Maybe String, String) deriving Show
+
+data Function = Func0 {
+    function0::String
+  }
+  | Func1{
+    function1::[Value] -> Value
+  }
+
 -- Functions to implement
 max :: [Value] -> Value
 max values@(value:_) = case value of
@@ -145,8 +143,7 @@ parseSelect [] = Left "Incomplete select statement"
 parseSelect x = do
   x1 <- parseSelectArgs x
   x2 <- parseFromArgs x1
-  result <- parseWhereArgs x2
-  return(result)
+  parseWhereArgs x2
   where
     parseSelectArgs :: String -> Either ErrorMessage (String, ParsedStatement)
     parseSelectArgs [] = Left "Reached unknown state"
@@ -154,22 +151,28 @@ parseSelect x = do
       (x, sym, _) | x == "" -> Left $ "Unexpected " ++ [sym]
                   | (elem sym "=<>)'") -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
       (_, ';', _) -> Left "Missing from statememnt"
-      (x, ' ', xs) -> Right (xs, SelectStatement { selectArgs = [Right x]})
+      (x, ' ', xs) -> do
+                        fullName <- parseFullCollumnName x 
+                        Right (xs, SelectStatement { selectArgs = [Right fullName]})
       (x, ',', xs) -> case (parseSelectArgs xs) of
         Left e -> Left e
-        Right (parseRem, parseRes) -> Right (parseRem, SelectStatement { selectArgs = (((Right x) : (selectArgs parseRes)))})
-      (x, '(', xs) -> case (parseWord xs) of
-        (x1, ')', xs1)
-          | (getTermination xs1) == ' ' -> case (getFunction x) of
-              Left e -> Left e
-              Right func -> Right (xs1, SelectStatement { selectArgs = [Left (x1, func)]})
-          | (getTermination xs1) == ',' -> case (parseSelectArgs (trpl3 (parseWord xs1))) of
-              Left e -> Left e
-              Right (parseRem, parseRes) -> case (getFunction x) of
-                Left e -> Left e
-                Right func -> Right (parseRem, SelectStatement { selectArgs = (Left (x1, func)) : (selectArgs parseRes)})
-          | otherwise -> Left $ "Unexpected " ++ [getTermination xs1] ++ " after (" ++ x1 ++ ")"
-        _ -> Left $ "Too many function arguments in function " ++ x;
+        Right (parseRem, parseRes) -> do
+                                        fullName <- parseFullCollumnName x 
+                                        Right (parseRem, SelectStatement { selectArgs = (((Right fullName) : (selectArgs parseRes)))})
+      (x, '(', xs) -> do
+        (bracketStuff, rem) <- parseBrackets xs
+        func <- getFunction x
+        args <- if(parseCompare x "now")
+                  then parseFuncArgs bracketStuff "empty"
+                  else parseFuncArgs bracketStuff "arg"
+        fullNames <- parseAllFullCollumnNames args
+        result <- if((getTermination rem) == ' ' && (head rem) == ' ') then 
+                      Right (rem, SelectStatement { selectArgs = [Left (fullNames, func)]})
+                  else if((getTermination rem) == ',') then case (parseSelectArgs (trpl3 (parseWord rem))) of
+                      Left e -> Left e
+                      Right (parseRem, parseRes) -> Right (parseRem, SelectStatement { selectArgs = (Left (fullNames, func)) : (selectArgs parseRes)})
+                  else Left $ "Unexpected " ++ [getTermination rem] ++ " after (" ++ (head args) ++ ")"
+        return (result)
 
     getTermination :: String -> Char
     getTermination [] = ';'
@@ -211,7 +214,9 @@ parseSelect x = do
                             ("", sym, xs2) -> parseOperator (Constant x1, sym, xs2) b
                             (x2, _, _) -> Left $ "Unexpected " ++ x2 ++ " after " ++ x1 
                         | otherwise -> Left $ "Unexpected \' after " ++ x  
-          (x, sym, xs) -> parseOperator (ColumnName x, sym, xs) b
+          (x, sym, xs) ->  do
+                            fullName <- parseFullCollumnName x 
+                            parseOperator (ColumnName fullName, sym, xs) b
           where
             parseOperator :: (WhereOperand, Char, String) -> ParsedStatement -> Either ErrorMessage ParsedStatement
             parseOperator (x1, sym, _) _ | elem sym ",()" = Left $ "Unexpected " ++ [sym] ++ " after " ++ show x1
@@ -250,30 +255,76 @@ parseSelect x = do
                                | otherwise -> Left $ "Unrecognised statement: " ++ x1
                 (x2, sym, _) -> Left $ "Mega Unexpected " ++ [sym] ++ " after " ++ x2
             | otherwise -> Left $ "Unexpected \' after " ++ x  
-          (x, ';', _) | x /= "" -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = [(a, ColumnName x, func)] }
+          (x, ';', _) | x /= "" ->  do
+                        fullName <- parseFullCollumnName x 
+                        Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = [(a, ColumnName fullName, func)] }
                       | otherwise -> Left "Missing second operand"
           (x, ' ', xs) -> case (parseKeyword xs) of
             Left e -> Left e
             Right (x1, xs1) -> if (parseCompare x1 "or")
               then if (xs1 /= "")
-                then case (parseWhereArgs' (xs1, statement)) of
-                  Left e -> Left e
-                  Right parseRes -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = (a, ColumnName x, func) : (whereArgs parseRes)}
+                then do 
+                  parseRes <- (parseWhereArgs' (xs1, statement))
+                  fullName <- parseFullCollumnName x
+                  Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = (a, ColumnName fullName, func) : (whereArgs parseRes)}
                 else Left $ "Missing statement after " ++ x1 
               else Left $ "Unrecognised statement: " ++ x1
           (x, sym, _) -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
+
+parseFuncArgs :: String -> String -> Either ErrorMessage [String]
+parseFuncArgs a "empty" | a == "" = Right []
+                        | otherwise = Left $ "Unexpected " ++ a ++ " in the function argument list"
+parseFuncArgs a "arg" = case (parseWord a) of
+    (_, ';', _) | a /= "" -> Right $ [a]
+                | otherwise -> Left "Missing function argument"
+    (x, sym, _) -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x                         
+
+parseBrackets :: String -> Either ErrorMessage (String, String)
+parseBrackets [] = Left "Missing closing bracket of a function"
+parseBrackets (x:xs) = if (x == ')') then Right ("", xs) 
+  else do
+    parseResult <- parseBrackets xs
+    result <- Right (x : (fst parseResult), snd parseResult)
+    return (result)
 
 parseConstant :: String -> (String, String)
 parseConstant [] = ("", "")
 parseConstant (x:xs) = if (x == '\'') then ("", xs) else (x : (fst parseResult), snd parseResult)
   where parseResult = parseConstant xs
 
-getFunction :: String -> Either ErrorMessage ([Value] -> Value)
-getFunction a = if (parseCompare a "max")
-  then Right Lib2.max
-  else if (parseCompare a "sum")
-    then Right Lib2.sum
-    else Left $ "Unrecognised function: " ++ a
+parseAllFullCollumnNames :: [String] -> Either ErrorMessage [(Maybe String, String)]
+parseAllFullCollumnNames [] = Right []
+parseAllFullCollumnNames (x:xs) = do
+  xFull <- parseFullCollumnName x
+  xsFull <- parseAllFullCollumnNames xs
+  return (xFull:xsFull)
+
+
+parseFullCollumnName :: String -> Either ErrorMessage (Maybe String, String)
+parseFullCollumnName a | checkForDots a = case (parseFullCollumnName' a) of
+                          Right (a, b) -> Right (Just a, b)
+                          Left e -> Left e
+                       | otherwise = Right (Nothing, a)
+  where
+    parseFullCollumnName':: String -> Either ErrorMessage (String, String)
+    parseFullCollumnName' (x:xs) | x == '.' = if(checkForDots xs) 
+                                  then Left "Unexpected . symbol"
+                                  else Right ("", xs)
+                                 | otherwise = do
+                                   (table, collumn) <- parseFullCollumnName' xs
+                                   return (((x : table), collumn))
+
+checkForDots :: String -> Bool
+checkForDots [] = False
+checkForDots (x:xs) | x == '.' = True
+                    | otherwise = checkForDots xs
+
+getFunction :: String -> Either ErrorMessage Function
+getFunction a 
+  |(parseCompare a "max") = Right $ Func1 Lib2.max
+  |(parseCompare a "sum") = Right $ Func1 Lib2.sum
+  |(parseCompare a "now") = Right $ Func0 Lib2.now
+  | otherwise = Left $ "Unrecognised function: " ++ a
 
 trpl1 (a, _, _) = a
 trpl2 (_, a, _) = a
