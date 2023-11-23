@@ -10,7 +10,7 @@ where
 
 import Control.Monad.Free (Free (..), liftF)
 import DataFrame (DataFrame)
-import InMemoryTables ( tableEmployees )
+import InMemoryTables (database)
 import Data.Time ( UTCTime )
 import Text.JSON.Generic
 
@@ -20,8 +20,8 @@ type ErrorMessage = String
 
 data ExecutionAlgebra next
     = GetTime (UTCTime -> next)
-    | SaveTable TableName TableContent (() -> next)
-    | LoadTable TableName (TableContent -> next)
+    | SaveDatabase TableContent (() -> next)
+    | LoadDatabase (TableContent -> next)
     -- feel free to add more constructors here
     deriving Functor
 
@@ -30,14 +30,17 @@ type Execution = Free ExecutionAlgebra
 getTime :: Execution UTCTime
 getTime = liftF $ GetTime id
 
-saveTable :: TableName -> TableContent -> Execution ()
-saveTable name content = liftF $ SaveTable name content id
+saveDatabase :: TableContent -> Execution ()
+saveDatabase content = liftF $ SaveDatabase content id
 
-loadTable :: TableName -> Execution TableContent
-loadTable name = liftF $ LoadTable name id
+loadDatabase :: Execution TableContent
+loadDatabase = liftF $ LoadDatabase id
 
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
     return $ Left "implement me"
-    a <- loadTable "foo"
-    return $ Left a
+
+
+-- TODO: implement this; for now it returns an empty string
+databaseToJson :: [(TableName, DataFrame)] -> TableContent
+databaseToJson _ = ""
