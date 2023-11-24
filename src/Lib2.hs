@@ -23,9 +23,9 @@ type WhereOperator = (String -> String -> Bool)
 data ParsedStatement = SelectStatement {
         -- Either single max(column_name), sum(column_name) or list of column names
         --Right side: Maybe String = table name (optional), String = collumn name
-        selectArgs :: [Either ([(Maybe String, String)], Function) (Maybe String, String)],
+        selectColumns :: [Either ([(Maybe String, String)], Function) (Maybe String, String)],
         -- Table names
-        fromArgs :: [String],
+        tableNames :: [String],
         -- All 'where' args are column_name0 ?=? column_name1 ORed
         whereArgs :: [(WhereOperand, WhereOperand, WhereOperator)]
     }
@@ -34,17 +34,17 @@ data ParsedStatement = SelectStatement {
         showTableArgs :: Maybe String
     }
     | UpdateStatement {
-      tablename :: String,
+      tableName :: String,
       assignedValues :: [(String, Value)],
       whereArgs :: [(WhereOperand, WhereOperand, WhereOperator)]
     }
     | InsertIntoStatement {
-      tablename :: String,
+      tableName :: String,
       valuesOrder :: Maybe [String],
       values :: [Value]
     }
     | DeleteStatement {
-      tablename :: String,
+      tableName :: String,
       whereArgs :: [(WhereOperand, WhereOperand, WhereOperator)]
     }
     --deriving (Eq) IDK what this does just temporary this
@@ -168,12 +168,12 @@ parseSelect x = do
       (_, ';', _) -> Left "Missing from statememnt"
       (x, ' ', xs) -> do
                         fullName <- parseFullCollumnName x 
-                        Right (xs, SelectStatement { selectArgs = [Right fullName]})
+                        Right (xs, SelectStatement { selectColumns = [Right fullName]})
       (x, ',', xs) -> case (parseSelectArgs xs) of
         Left e -> Left e
         Right (parseRem, parseRes) -> do
                                         fullName <- parseFullCollumnName x 
-                                        Right (parseRem, SelectStatement { selectArgs = (((Right fullName) : (selectArgs parseRes)))})
+                                        Right (parseRem, SelectStatement { selectColumns = (((Right fullName) : (selectColumns parseRes)))})
       (x, '(', xs) -> do
         (bracketStuff, rem) <- parseBrackets xs
         func <- getFunction x
@@ -182,10 +182,10 @@ parseSelect x = do
                   else parseFuncArgs bracketStuff "arg"
         fullNames <- parseAllFullCollumnNames args
         result <- if ((getTermination rem) == ' ' && (head rem) == ' ') then 
-                      Right (rem, SelectStatement { selectArgs = [Left (fullNames, func)]})
+                      Right (rem, SelectStatement { selectColumns = [Left (fullNames, func)]})
                   else if((getTermination rem) == ',') then case (parseSelectArgs (trpl3 (parseWord rem))) of
                       Left e -> Left e
-                      Right (parseRem, parseRes) -> Right (parseRem, SelectStatement { selectArgs = (Left (fullNames, func)) : (selectArgs parseRes)})
+                      Right (parseRem, parseRes) -> Right (parseRem, SelectStatement { selectColumns = (Left (fullNames, func)) : (selectColumns parseRes)})
                   else Left $ "Unexpected " ++ [getTermination rem] ++ " after (" ++ (head args) ++ ")"
         return (result)
 
@@ -198,16 +198,16 @@ parseSelect x = do
         where
           parseFromArgs' :: (String, ParsedStatement) -> Either ErrorMessage (String, ParsedStatement)
           parseFromArgs' (a, b) = case (parseWord a) of
-            (x, sym, xs) | elem sym "; " -> Right (xs, SelectStatement { selectArgs = (selectArgs b), fromArgs = [x]})
+            (x, sym, xs) | elem sym "; " -> Right (xs, SelectStatement { selectColumns = (selectColumns b), tableNames = [x]})
             (x, sym, xs) | elem sym ","  -> case (parseFromArgs' (xs, b)) of
                 Left e -> Left e
-                Right (parseRem, parseRes) -> Right (parseRem, SelectStatement { selectArgs = (selectArgs parseRes), fromArgs = (x : (fromArgs parseRes))})
+                Right (parseRem, parseRes) -> Right (parseRem, SelectStatement { selectColumns = (selectColumns parseRes), tableNames = (x : (tableNames parseRes))})
             (x, sym, _)  | x == ""   -> Left $ "Unexpected " ++ [sym]
                          | otherwise -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
               where parseResult = parseFromArgs' (xs, b)
 
 parseWhereArgs :: (String, ParsedStatement) -> Either ErrorMessage ParsedStatement
-parseWhereArgs ([], a) = Right SelectStatement { selectArgs = (selectArgs a), fromArgs = (fromArgs a), whereArgs = []}
+parseWhereArgs ([], a) = Right SelectStatement { selectColumns = (selectColumns a), tableNames = (tableNames a), whereArgs = []}
 parseWhereArgs (a, b) = case (parseKeyword a) of
   Left e -> Left e
   Right (x, xs) -> if (parseCompare x "where")
@@ -247,26 +247,26 @@ parseWhereArgs (a, b) = case (parseKeyword a) of
         | x == "" -> case (parseConstant xs) of
           ("", _) -> Left "Constant can not be emtpy"
           (x1, xs1) -> case (parseWord xs1) of
-            (x2, ';', _)  | x2 == "" -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = [(a, Constant x1, func)] }
+            (x2, ';', _)  | x2 == "" -> Right SelectStatement { selectColumns = (selectColumns statement), tableNames = (tableNames statement), whereArgs = [(a, Constant x1, func)] }
                           | parseCompare x2 "or" -> Left $ "Missing statement after " ++ x2 
                           | otherwise -> Left $ "Unexpected " ++ x2 ++ " after " ++ x1  
             (x2, ' ', xs2) | parseCompare x2 "or" -> if (xs2 /= "")
                               then case (parseWhereArgs' (xs2, statement)) of
                                 Left e -> Left e
-                                Right parseRes -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = (a, Constant x1, func) : (whereArgs parseRes)}
+                                Right parseRes -> Right SelectStatement { selectColumns = (selectColumns statement), tableNames = (tableNames statement), whereArgs = (a, Constant x1, func) : (whereArgs parseRes)}
                               else Left $ "Missing statement after " ++ x2
                             | otherwise -> Left $ "Unrecognised statement: " ++ x1
             (x2, '\'', xs2) | parseCompare x2 "or" -> if (xs2 /= "")
                               then case (parseWhereArgs' ('\'':xs2, statement)) of
                                 Left e -> Left e
-                                Right parseRes -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = (a, Constant x1, func) : (whereArgs parseRes)}
+                                Right parseRes -> Right SelectStatement { selectColumns = (selectColumns statement), tableNames = (tableNames statement), whereArgs = (a, Constant x1, func) : (whereArgs parseRes)}
                               else Left $ "Missing statement after " ++ x2
                             | otherwise -> Left $ "Unrecognised statement: " ++ x1
             (x2, sym, _) -> Left $ "Mega Unexpected " ++ [sym] ++ " after " ++ x2
         | otherwise -> Left $ "Unexpected \' after " ++ x  
       (x, ';', _) | x /= "" ->  do
                     fullName <- parseFullCollumnName x 
-                    Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = [(a, ColumnName fullName, func)] }
+                    Right SelectStatement { selectColumns = (selectColumns statement), tableNames = (tableNames statement), whereArgs = [(a, ColumnName fullName, func)] }
                   | otherwise -> Left "Missing second operand"
       (x, ' ', xs) -> case (parseKeyword xs) of
         Left e -> Left e
@@ -275,7 +275,7 @@ parseWhereArgs (a, b) = case (parseKeyword a) of
             then do 
               parseRes <- (parseWhereArgs' (xs1, statement))
               fullName <- parseFullCollumnName x
-              Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = (a, ColumnName fullName, func) : (whereArgs parseRes)}
+              Right SelectStatement { selectColumns = (selectColumns statement), tableNames = (tableNames statement), whereArgs = (a, ColumnName fullName, func) : (whereArgs parseRes)}
             else Left $ "Missing statement after " ++ x1 
           else Left $ "Unrecognised statement: " ++ x1
       (x, sym, _) -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
@@ -288,11 +288,11 @@ parseInsert a = do
     then do
       (parsedTablename, nextSym, rem) <- do
         (parsedWord, symbol, parseRem) <- Right $ parseWord xs
-        tablenameresult <- case (symbol) of
+        tableNameresult <- case (symbol) of
           termSym | elem termSym " (" -> Right (parsedWord, symbol, parseRem)
                   | termSym == ';' -> Left "Missing values in INSERT statement"
           otherwise -> Left $ "Unexpected " ++ [symbol] ++ " after " ++ parsedWord
-        return (tablenameresult)
+        return (tableNameresult)
       (parsedValuesOrder, rem2) <- if(nextSym == '(') then parseCollumnnameList rem else Right ([], rem)
       parsedValues <- do
         (keyword, symbol, parseRem) <- Right $ parseWord rem2
@@ -302,7 +302,7 @@ parseInsert a = do
             then if(symbol == ';') then Left "Missing value list" else Left $ "Unexpected " ++ [symbol] ++ " after " ++ parseRem 
             else Left $ "Unrecognised keyword: " ++ keyword
         return (valuesResult)
-      return (InsertIntoStatement { tablename = parsedTablename, valuesOrder = ifEmptyReturnNothing parsedValuesOrder, values = parsedValues})
+      return (InsertIntoStatement { tableName = parsedTablename, valuesOrder = ifEmptyReturnNothing parsedValuesOrder, values = parsedValues})
     else Left "Unrecognised keyword after INSERT"
   return (result)
   where
@@ -316,10 +316,10 @@ parseUpdate a = do
   (parsedTablename, sym, rem) <- Right $ parseWord a
   _ <- if (sym == ';') then Left "Missing list of updated values" else if(sym /= ' ') then Left $ "Unexpected " ++ [sym] ++ " after " ++ parsedTablename else Right Nothing
   (newAssignedValues, termChar, rem2) <- parseValueAssignment rem
-  partialParsedStatememnt <- Right $ UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues}
+  partialParsedStatememnt <- Right $ UpdateStatement {tableName = parsedTablename, assignedValues = newAssignedValues}
   result <- case (termChar) of
     ' ' -> parseWhereArgs (rem2 , partialParsedStatememnt)
-    ';' -> Right UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues, whereArgs = []}
+    ';' -> Right UpdateStatement {tableName = parsedTablename, assignedValues = newAssignedValues, whereArgs = []}
     otherwise -> Left $ "Unexpected " ++ [termChar] ++ " after values assignment"
   return (result)
 
@@ -374,10 +374,10 @@ parseDelete a = do
   (parsedTablename, sym, rem2) <- Right $ parseWord rem
   result <- case (sym) of
     ' ' -> do
-      partialStatement <- Right $ DeleteStatement {tablename = parsedTablename}
+      partialStatement <- Right $ DeleteStatement {tableName = parsedTablename}
       result <- parseWhereArgs (rem2, partialStatement)
       return (result)
-    ';' -> Right $ DeleteStatement {tablename = parsedTablename, whereArgs = []}
+    ';' -> Right $ DeleteStatement {tableName = parsedTablename, whereArgs = []}
     otherwise -> Left $ "Unexpected " ++ [sym] ++ " after " ++ parsedTablename
   return (result)
 
@@ -552,24 +552,61 @@ parseCompare _ _ = False
 
 -- Executes a parsed statemet. Produces a DataFrame. Uses
 -- InMemoryTables.databases a source of data.
-executeStatement :: ParsedStatement -> Either ErrorMessage DataFrame
-executeStatement _ = Left "Once again under renovation"
--- executeStatement :: ParsedStatement -> Either ErrorMessage DataFrame
--- executeStatement (SelectStatement selectArgs' fromArgs' whereArgs') = case findTableByName database fromArgs' of
---     Nothing -> Left $ "Could not find table " ++ fromArgs'
+executeStatement :: ParsedStatement -> [(TableName, DataFrame)] -> Either ErrorMessage DataFrame
+executeStatement (SelectStatement selectColumns' tableNames' whereArgs') database' = do
+    usedTables <- getUsedTables tableNames' database
+    _ <- guardCheck (null selectColumns') $ "Got zero columns to select"
+   -- _ <- if nullOrAny (null) (fmap findTableByName tableNames') then
+   --         Left "Couldn't find at least one table in the database"
+   --     else
+   --         Right 0
+    Left $ "Select statement unsupported"
+executeStatement (ShowTableStatement showTableArgs') database' =
+    case showTableArgs' of
+        Nothing -> Right $ DataFrame
+            [ Column "table_name" StringType ]
+            [ [ StringValue (fst table) ] | table <- database' ]
+        Just tableName' -> do
+            DataFrame cols _ <- maybe (Left $ "Could not find table " ++ tableName')
+                (Right)
+                (findTableByName database' tableName')
+            Right $ DataFrame
+                [ Column "column_name" StringType, Column "column_type" StringType]
+                [ [StringValue name, StringValue $ show colType] | Column name colType <- cols ]
+executeStatement (UpdateStatement tableName' assignedValues' whereArgs') database' = do
+    Left $ "Update statement unsupported"
+executeStatement (InsertIntoStatement tableName' valuesOrder' values') database' = do
+    Left $ "Insert statement unsupported"
+executeStatement (DeleteStatement tableName' whereArgs') database' = do
+    table@(DataFrame cols rows) <- maybe (Left $ "Could not find table to delete")
+        (Right)
+        (lookup tableName' database')
+    _ <- guardCheck (all (\colName -> any (\(Column name _) -> colName == name) cols) colNames)
+        $ "Select references non-existing columns"
+    ----let colNames = [colName | ((ColumnName _ colName) _) <- whereArgs'] ++ [colName | ((ColumnName_ colName)  _  _) <- whereArgs']
+    --Right $ DataFrame columns [row | row <- rows]
+    Left $ "Delete statement unsupported"
+    where
+        colNames = [colName | ((ColumnName (_, colName)), _, _) <- whereArgs']
+            ++ [colName | (_, (ColumnName (_, colName)), _) <- whereArgs']
+        --checkAllColNames :: [String] -> [Column] -> Bool
+        --checkAllColNames colNames cols = 
+executeStatement _ _ = Left $ "Unknown unsupported statement"
+-- executeStatement (SelectStatement selectColumns' tableNames' whereArgs') = case findTableByName database tableNames' of
+--     Nothing -> Left $ "Could not find table " ++ tableNames'
 --     -- If the table was found,
 --     Just table@(DataFrame columns rows) ->
 --         -- Ensure we have some select columns
 --         if (null selectColumnNames) then
 --             Left $ "Got zero columns to select"
 --         -- Ensure select only has selection by column value or only by function
---         else if (any (isLeft) selectArgs' && any(isRight) selectArgs') then
+--         else if (any (isLeft) selectColumns' && any(isRight) selectColumns') then
 --             Left $ "Cannot select by column value and by function at the same time"
 --         -- Wildcard only once
 --         else if (let (x:xs) = selectColumnNames in x == "*" && not (null xs)) then
 --             Left $ "Can only select all columns once"
 --         -- Cannot use wildcard with functions
---         else if (let (x:xs) = selectColumnNames in x == "*" && not (null (getOnlyLefts selectArgs'))) then
+--         else if (let (x:xs) = selectColumnNames in x == "*" && not (null (getOnlyLefts selectColumns'))) then
 --             Left $ "Cannot apply function to wildcard"
 --         ---- Check if the column names mentioned in the selection arguments actually exist,
 --         ---- fall-through for wildcard
@@ -589,18 +626,18 @@ executeStatement _ = Left "Once again under renovation"
 --             let DataFrame columns' rows' = createFilteredTable table whereArgs'
 --             let columnValues = combineColumnsWithValues columns' (if null rows' then [map (\x -> NullValue) columns'] else rows') -- [(Column, [Value])]
 --             -- Check for wildcard, too
---             let selectArgs'' = let (x:_) = selectColumnNames in if x == "*" then [Right columnName | columnName <- tableColumnNames] else selectArgs'
---             case selectArgs'' of
---                 -- If selectArgs'' is Left, then it's (String, [Value] -> Value)
+--             let selectColumns'' = let (x:_) = selectColumnNames in if x == "*" then [Right columnName | columnName <- tableColumnNames] else selectColumns'
+--             case selectColumns'' of
+--                 -- If selectColumns'' is Left, then it's (String, [Value] -> Value)
 --                 (Left _:_) -> do
---                     let columnNamesAndFunctions = getOnlyLefts selectArgs''
+--                     let columnNamesAndFunctions = getOnlyLefts selectColumns''
 --                     -- Check if column names match and apply functions
 --                     let resultColumnValues = [(Column colName colType, [func $ values]) | (name, func) <- columnNamesAndFunctions, (Column colName colType, values) <- columnValues, name == colName]
 --                     let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
 --                     Right $ DataFrame (fst resultColumnsRows) (snd resultColumnsRows)
---                 -- If selectArgs'' is Right, then it's only String
+--                 -- If selectColumns'' is Right, then it's only String
 --                 (Right _:_) -> do
---                     let columnNames = getOnlyRights selectArgs''
+--                     let columnNames = getOnlyRights selectColumns''
 --                     -- Check if column names match
 --                     let resultColumnValues = [columnValue | columnName <- columnNames, columnValue@(Column name _, _) <- columnValues, columnName == name]
 --                     let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
@@ -610,7 +647,7 @@ executeStatement _ = Left "Once again under renovation"
 --             tableColumnNames :: [String]
 --             tableColumnNames = [ columnName | Column columnName _ <- columns ]
 --             selectColumnNames :: [String]
---             selectColumnNames = map (getSelectColumnName) selectArgs'
+--             selectColumnNames = map (getSelectColumnName) selectColumns'
 --                 where
 --                     getSelectColumnName :: Either (String, [Value] -> Value) String -> String
 --                     getSelectColumnName (Right str) = str
@@ -637,8 +674,17 @@ executeStatement _ = Left "Once again under renovation"
 --             return colType
 -- whereColumnIsStringType _ _ = True
 
--- nullOrAny :: (Foldable t) => (a -> Bool) -> t a -> Bool
--- nullOrAny f x = null x || any f x
+nullOrAny :: (Foldable t) => (a -> Bool) -> t a -> Bool
+nullOrAny f x = null x || any f x
+
+getUsedTables :: [String] -> [(TableName, DataFrame)] -> Either ErrorMessage [(TableName, DataFrame)]
+getUsedTables names database = getUsedTables' names database []
+    where
+        getUsedTables' :: [String] -> [(TableName, DataFrame)] -> [(TableName, DataFrame)] -> Either ErrorMessage [(TableName, DataFrame)]
+        getUsedTables' (name:names) database acc = case lookup name database of
+            Just dataframe -> getUsedTables' names database ((name, dataframe):acc)
+            _ -> Left $ "Could not find table " ++ name ++ " in database"
+        getUsedTables' [] _ acc = Right $ reverse acc
 
 -- -- Applies where filters and column selection to a table, creating a new table
 -- createFilteredTable :: DataFrame
@@ -698,3 +744,13 @@ executeStatement _ = Left "Once again under renovation"
 --   Constant _ == ColumnName _ = False
 --   ColumnName _ == Constant _ = False
 --   a /= b = not (a == b)
+--
+
+-- False - first, True - second
+ifElse :: Bool -> a -> a  -> a
+ifElse b x y
+    | b = x
+    | otherwise = y
+
+guardCheck :: Bool -> ErrorMessage -> Either ErrorMessage ()
+guardCheck b failMessage = ifElse b (Left failMessage) (Right ())
