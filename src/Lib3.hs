@@ -10,9 +10,9 @@ where
 
 import Control.Monad.Free (Free (..), liftF)
 import DataFrame (DataFrame)
-import InMemoryTables ( tableEmployees )
+import InMemoryTables ( database )
 import Data.Time ( UTCTime )
-import Text.JSON.Generic
+import Lib2
 
 type TableName = String
 type TableContent = String
@@ -36,8 +36,9 @@ saveTable name content = liftF $ SaveTable name content id
 loadTable :: TableName -> Execution TableContent
 loadTable name = liftF $ LoadTable name id
 
+-- We're using a temporary from memory database
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
-    return $ Left "implement me"
-    a <- loadTable "foo"
-    return $ Left a
+    case parseStatement sql of
+        Left err -> return $ Left err
+        Right parsed -> return $ executeStatement parsed InMemoryTables.database
