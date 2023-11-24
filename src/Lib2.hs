@@ -698,3 +698,12 @@ executeStatement _ = Left "Once again under renovation"
 --   Constant _ == ColumnName _ = False
 --   ColumnName _ == Constant _ = False
 --   a /= b = not (a == b)
+--
+showParsedStatementType :: Either ErrorMessage ParsedStatement -> String
+showParsedStatementType x = case x of
+    Right (SelectStatement _ _ _) -> "SelectStatement"
+    Right (ShowTableStatement _) -> "ShowTableStatement"
+    Right (UpdateStatement _ _ _) -> "UpdateStatement"
+    Right (InsertIntoStatement _ _ _) -> "InsertIntoStatement"
+    Right (DeleteStatement _ _) -> "DeleteStatement"
+    _ -> "ErrorMessage"
