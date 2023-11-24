@@ -158,8 +158,9 @@ parseSelect :: String -> Either ErrorMessage ParsedStatement
 parseSelect [] = Left "Incomplete select statement"
 parseSelect x = do
   x1 <- parseSelectArgs x
-  x2 <- parseFromArgs x1
-  parseWhereArgs x2
+  (rem, parsedStatement) <- parseFromArgs x1
+  parsedWhereArgs <- parseWhereArgs rem
+  return (SelectStatement { selectArgs = (selectArgs parsedStatement), fromArgs = (fromArgs parsedStatement), whereArgs = parsedWhereArgs})
   where
     parseSelectArgs :: String -> Either ErrorMessage (String, ParsedStatement)
     parseSelectArgs [] = Left "Reached unknown state"
@@ -207,76 +208,76 @@ parseSelect x = do
                          | otherwise -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
               where parseResult = parseFromArgs' (xs, b)
 
-parseWhereArgs :: (String, ParsedStatement) -> Either ErrorMessage ParsedStatement
-parseWhereArgs ([], a) = Right SelectStatement { selectArgs = (selectArgs a), fromArgs = (fromArgs a), whereArgs = []}
-parseWhereArgs (a, b) = case (parseKeyword a) of
+parseWhereArgs :: String -> Either ErrorMessage [(WhereOperand, WhereOperand, WhereOperator)]
+parseWhereArgs [] = Right []
+parseWhereArgs a = case (parseKeyword a) of
   Left e -> Left e
   Right (x, xs) -> if (parseCompare x "where")
-    then if (xs /= "") then parseWhereArgs' (xs, b) else Left "Missing where statement"
+    then if (xs /= "") then parseWhereArgs' xs else Left "Missing where statement"
     else Left $ "Unrecognised statement: " ++ x
   where
-    parseWhereArgs' :: (String, ParsedStatement) -> Either ErrorMessage ParsedStatement
-    parseWhereArgs' (a, b) = case (parseWord a) of
+    parseWhereArgs' :: String -> Either ErrorMessage [(WhereOperand, WhereOperand, WhereOperator)]
+    parseWhereArgs' a = case (parseWord a) of
       (x, '\'', xs) | x == "" -> case (parseConstant xs) of
                       ("", _) -> Left "Constant can not be emtpy"
                       (x1, xs1) -> case (parseWord xs1) of
                         (_, '\'', _) -> Left $ "Unexpected \' after " ++ x
-                        ("", sym, xs2) -> parseOperator (Constant x1, sym, xs2) b
+                        ("", sym, xs2) -> parseOperator (Constant x1, sym, xs2)
                         (x2, _, _) -> Left $ "Unexpected " ++ x2 ++ " after " ++ x1 
                     | otherwise -> Left $ "Unexpected \' after " ++ x  
       (x, sym, xs) ->  do
                         fullName <- parseFullCollumnName x 
-                        parseOperator (ColumnName fullName, sym, xs) b
+                        parseOperator (ColumnName fullName, sym, xs)
       where
-        parseOperator :: (WhereOperand, Char, String) -> ParsedStatement -> Either ErrorMessage ParsedStatement
-        parseOperator (x1, sym, _) _ | elem sym ",()" = Left $ "Unexpected " ++ [sym] ++ " after " ++ show x1
-                                      | show x1 == "" = Left $ "Unexpected " ++ [sym]
-                                      | elem sym "; " = Left $ "Missing predicate after " ++ show x1
-        parseOperator (x1, '=', xs1) b = parseSecondOperand equal b (x1, xs1)
-        parseOperator (x1, '>', xs1) b = if (xs1 /= "" && (xs1 !! 0) == '=')
-          then parseSecondOperand moreOrEqual b (x1, tail xs1)
+        parseOperator :: (WhereOperand, Char, String) -> Either ErrorMessage [(WhereOperand, WhereOperand, WhereOperator)]
+        parseOperator (x1, sym, _) | elem sym ",()" = Left $ "Unexpected " ++ [sym] ++ " after " ++ show x1
+                                   | show x1 == "" = Left $ "Unexpected " ++ [sym]
+                                   | elem sym "; " = Left $ "Missing predicate after " ++ show x1
+        parseOperator (x1, '=', xs1) = parseSecondOperand equal (x1, xs1)
+        parseOperator (x1, '>', xs1) = if (xs1 /= "" && (xs1 !! 0) == '=')
+          then parseSecondOperand moreOrEqual (x1, tail xs1)
           else Left "Unexpected symbol after >"
-        parseOperator (x1, '<', xs1) b = if (xs1 /= "" && (xs1 !! 0) == '=')
-          then parseSecondOperand lessOrEqual b (x1, tail xs1)
+        parseOperator (x1, '<', xs1) = if (xs1 /= "" && (xs1 !! 0) == '=')
+          then parseSecondOperand lessOrEqual (x1, tail xs1)
           else if (xs1 /= "" && (xs1 !! 0) == '>')
-            then parseSecondOperand unequal b (x1, tail xs1)
+            then parseSecondOperand unequal (x1, tail xs1)
             else Left "Unexpected symbol after <"
 
-    parseSecondOperand :: (String -> String -> Bool) -> ParsedStatement -> (WhereOperand, String) -> Either ErrorMessage ParsedStatement
-    parseSecondOperand func statement (a, ab) = case (parseWord ab) of
+    parseSecondOperand :: (String -> String -> Bool) -> (WhereOperand, String) -> Either ErrorMessage [(WhereOperand, WhereOperand, WhereOperator)]
+    parseSecondOperand func (a, ab) = case (parseWord ab) of
       (x, '\'', xs) 
         | x == "" -> case (parseConstant xs) of
           ("", _) -> Left "Constant can not be emtpy"
           (x1, xs1) -> case (parseWord xs1) of
-            (x2, ';', _)  | x2 == "" -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = [(a, Constant x1, func)] }
+            (x2, ';', _)  | x2 == "" -> Right [(a, Constant x1, func)]
                           | parseCompare x2 "or" -> Left $ "Missing statement after " ++ x2 
                           | otherwise -> Left $ "Unexpected " ++ x2 ++ " after " ++ x1  
             (x2, ' ', xs2) | parseCompare x2 "or" -> if (xs2 /= "")
-                              then case (parseWhereArgs' (xs2, statement)) of
+                              then case (parseWhereArgs' xs2) of
                                 Left e -> Left e
-                                Right parseRes -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = (a, Constant x1, func) : (whereArgs parseRes)}
+                                Right parseRes -> Right $ (a, Constant x1, func) : parseRes
                               else Left $ "Missing statement after " ++ x2
                             | otherwise -> Left $ "Unrecognised statement: " ++ x1
             (x2, '\'', xs2) | parseCompare x2 "or" -> if (xs2 /= "")
-                              then case (parseWhereArgs' ('\'':xs2, statement)) of
+                              then case (parseWhereArgs' ('\'':xs2)) of
                                 Left e -> Left e
-                                Right parseRes -> Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = (a, Constant x1, func) : (whereArgs parseRes)}
+                                Right parseRes -> Right $ (a, Constant x1, func) : parseRes
                               else Left $ "Missing statement after " ++ x2
                             | otherwise -> Left $ "Unrecognised statement: " ++ x1
             (x2, sym, _) -> Left $ "Mega Unexpected " ++ [sym] ++ " after " ++ x2
         | otherwise -> Left $ "Unexpected \' after " ++ x  
       (x, ';', _) | x /= "" ->  do
                     fullName <- parseFullCollumnName x 
-                    Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = [(a, ColumnName fullName, func)] }
+                    Right $ [(a, ColumnName fullName, func)]
                   | otherwise -> Left "Missing second operand"
       (x, ' ', xs) -> case (parseKeyword xs) of
         Left e -> Left e
         Right (x1, xs1) -> if (parseCompare x1 "or")
           then if (xs1 /= "")
             then do 
-              parseRes <- (parseWhereArgs' (xs1, statement))
+              parseRes <- (parseWhereArgs' xs1)
               fullName <- parseFullCollumnName x
-              Right SelectStatement { selectArgs = (selectArgs statement), fromArgs = (fromArgs statement), whereArgs = (a, ColumnName fullName, func) : (whereArgs parseRes)}
+              Right $ (a, ColumnName fullName, func) : parseRes
             else Left $ "Missing statement after " ++ x1 
           else Left $ "Unrecognised statement: " ++ x1
       (x, sym, _) -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
@@ -317,9 +318,10 @@ parseUpdate a = do
   (parsedTablename, sym, rem) <- Right $ parseWord a
   _ <- if (sym == ';') then Left "Missing list of updated values" else if(sym /= ' ') then Left $ "Unexpected " ++ [sym] ++ " after " ++ parsedTablename else Right Nothing
   (newAssignedValues, termChar, rem2) <- parseValueAssignment rem
-  partialParsedStatememnt <- Right $ UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues}
   result <- case (termChar) of
-    ' ' -> parseWhereArgs (rem2 , partialParsedStatememnt)
+    ' ' -> do
+      parseRes <- parseWhereArgs rem2
+      Right $ UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues, whereArgs = parseRes}
     ';' -> Right UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues, whereArgs = []}
     otherwise -> Left $ "Unexpected " ++ [termChar] ++ " after values assignment"
   return (result)
@@ -375,9 +377,8 @@ parseDelete a = do
   (parsedTablename, sym, rem2) <- Right $ parseWord rem
   result <- case (sym) of
     ' ' -> do
-      partialStatement <- Right $ DeleteStatement {tablename = parsedTablename}
-      result <- parseWhereArgs (rem2, partialStatement)
-      return (result)
+      parsedWhereArgs <- parseWhereArgs rem2
+      Right $ DeleteStatement {tablename = parsedTablename, whereArgs = parsedWhereArgs}
     ';' -> Right $ DeleteStatement {tablename = parsedTablename, whereArgs = []}
     otherwise -> Left $ "Unexpected " ++ [sym] ++ " after " ++ parsedTablename
   return (result)
