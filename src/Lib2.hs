@@ -4,7 +4,8 @@ module Lib2
   ( parseStatement,
     executeStatement,
     ParsedStatement (..),
-    WhereOperand (..)
+    WhereOperand (..),
+    showParsedStatementType
   )
 where
 
