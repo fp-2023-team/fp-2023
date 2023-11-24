@@ -4,7 +4,8 @@ module Lib2
   ( parseStatement,
     executeStatement,
     ParsedStatement (..),
-    WhereOperand (..)
+    WhereOperand (..),
+    showParsedStatementType
   )
 where
 
@@ -775,3 +776,12 @@ guardCheck b failMessage = ifElse b (Left failMessage) (Right ())
 
 getColumnNames :: [Column] -> [String]
 getColumnNames columns = [colName | (Column colName _) <- columns]
+
+showParsedStatementType :: Either ErrorMessage ParsedStatement -> String
+showParsedStatementType x = case x of
+    Right (SelectStatement _ _ _) -> "SelectStatement"
+    Right (ShowTableStatement _) -> "ShowTableStatement"
+    Right (UpdateStatement _ _ _) -> "UpdateStatement"
+    Right (InsertIntoStatement _ _ _) -> "InsertIntoStatement"
+    Right (DeleteStatement _ _) -> "DeleteStatement"
+    _ -> "ErrorMessage"
