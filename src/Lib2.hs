@@ -362,8 +362,8 @@ parseValue a = do
       else case (parseConstant remainder) of
         ("", "") -> Left "Missing \' character"
         ("", _) -> Left "Value inside \'\' can not be empty"
-        (constant, constantRemainder) -> Right (StringValue constant, sym, trpl3(parseWord constantRemainder))
-    tempSym -> case (parsedWord) of
+        (constant, constantRemainder) -> Right (StringValue constant, getTermination constantRemainder, removeCharIfTerminating constantRemainder)
+    _ -> case (parsedWord) of
       word | parseCompare word "null" -> Right (NullValue, sym, remainder)
            | parseCompare word "true" -> Right (BoolValue True, sym, remainder)
            | isNumber word -> Right (IntegerValue $ getNumber word, sym, remainder)
