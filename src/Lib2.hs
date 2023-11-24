@@ -31,7 +31,7 @@ data ParsedStatement = SelectStatement {
     }
     | ShowTableStatement {
         -- Either TABLES or TABLE name[, ...]
-        showTableArgs :: Maybe String
+        tableToShow :: Maybe String
     }
     | UpdateStatement {
       tableName :: String,
@@ -530,7 +530,7 @@ parseShow a = case (parseKeyword a) of
   Left e -> Left e
   Right (x, xs) -> if (parseCompare x "tables")
     then if (xs == "") 
-      then Right ShowTableStatement { showTableArgs = Nothing } 
+      then Right ShowTableStatement { tableToShow = Nothing } 
       else Left "Too many arguments in show tables command"
     else if(parseCompare x "table")
       then if (xs /= "") then parseTableName xs else Left "Missing table arguments"
@@ -538,7 +538,7 @@ parseShow a = case (parseKeyword a) of
 
 parseTableName :: String -> Either ErrorMessage ParsedStatement
 parseTableName a = case (parseWord a) of
-  (result, ';', _) -> Right ShowTableStatement { showTableArgs = Just result}
+  (result, ';', _) -> Right ShowTableStatement { tableToShow = Just result}
   _ -> Left "Too many arguments in show table statement"
 
 parseEndSemicolon :: String -> String
@@ -555,14 +555,24 @@ parseCompare _ _ = False
 executeStatement :: ParsedStatement -> [(TableName, DataFrame)] -> Either ErrorMessage DataFrame
 executeStatement (SelectStatement selectColumns' tableNames' whereArgs') database' = do
     usedTables <- getUsedTables tableNames' database
-    _ <- guardCheck (null selectColumns') $ "Got zero columns to select"
+    _ <- guardCheck (null selectColumns') $ "Zero columns in 'select'"
    -- _ <- if nullOrAny (null) (fmap findTableByName tableNames') then
    --         Left "Couldn't find at least one table in the database"
    --     else
    --         Right 0
     Left $ "Select statement unsupported"
-executeStatement (ShowTableStatement showTableArgs') database' =
-    case showTableArgs' of
+    where
+        getUsedTables :: [String] -> [(TableName, DataFrame)] -> Either ErrorMessage [(TableName, DataFrame)]
+        getUsedTables names database = getUsedTables' names database []
+            where
+                getUsedTables' :: [String] -> [(TableName, DataFrame)] -> [(TableName, DataFrame)]
+                    -> Either ErrorMessage [(TableName, DataFrame)]
+                getUsedTables' (name:names) database acc = case lookup name database of
+                    Just dataframe -> getUsedTables' names database ((name, dataframe):acc)
+                    _ -> Left $ "Could not find table " ++ name ++ " in database"
+                getUsedTables' [] _ acc = Right $ reverse acc
+executeStatement (ShowTableStatement tableToShow') database' =
+    case tableToShow' of
         Nothing -> Right $ DataFrame
             [ Column "table_name" StringType ]
             [ [ StringValue (fst table) ] | table <- database' ]
@@ -574,19 +584,30 @@ executeStatement (ShowTableStatement showTableArgs') database' =
                 [ Column "column_name" StringType, Column "column_type" StringType]
                 [ [StringValue name, StringValue $ show colType] | Column name colType <- cols ]
 executeStatement (UpdateStatement tableName' assignedValues' whereArgs') database' = do
-    Left $ "Update statement unsupported"
-executeStatement (InsertIntoStatement tableName' valuesOrder' values') database' = do
-    Left $ "Insert statement unsupported"
-executeStatement (DeleteStatement tableName' whereArgs') database' = do
-    table@(DataFrame cols rows) <- maybe (Left $ "Could not find table to delete")
+    table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
         (Right)
         (lookup tableName' database')
-    _ <- guardCheck (all (\colName -> any (\(Column name _) -> colName == name) cols) colNames)
-        $ "Select references non-existing columns"
+    Left $ "Update statement unsupported"
+executeStatement (InsertIntoStatement tableName' valuesOrder' values') database' = do
+    table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
+        (Right)
+        (lookup tableName' database')
+    case valuesOrder' of
+        Just names -> do
+            Left $ "Insert statement unsupported"
+        _ -> do
+            Left $ "Insert statement unsupported"
+executeStatement (DeleteStatement tableName' whereArgs') database' = do
+    table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
+        (Right)
+        (lookup tableName' database')
+    _ <- guardCheck (all (\colName -> any (== colName) (getColumnNames cols)) colNames)
+        $ "Non-existing columns referenced in 'where'"
     ----let colNames = [colName | ((ColumnName _ colName) _) <- whereArgs'] ++ [colName | ((ColumnName_ colName)  _  _) <- whereArgs']
     --Right $ DataFrame columns [row | row <- rows]
     Left $ "Delete statement unsupported"
     where
+        colNames :: [String]
         colNames = [colName | ((ColumnName (_, colName)), _, _) <- whereArgs']
             ++ [colName | (_, (ColumnName (_, colName)), _) <- whereArgs']
         --checkAllColNames :: [String] -> [Column] -> Bool
@@ -655,7 +676,7 @@ executeStatement _ _ = Left $ "Unknown unsupported statement"
 --             whereColumnNames :: [String]
 --             whereColumnNames = concat [[a | (ColumnName a, _, _) <- whereArgs'],
 --                 [b | (_, ColumnName b, _) <- whereArgs']]
--- executeStatement (ShowTableStatement showTableArgs') = case showTableArgs' of
+-- executeStatement (ShowTableStatement tableToShow') = case tableToShow' of
 --     Nothing -> Right $ DataFrame
 --         [ Column "table_name" StringType ]
 --         [ [ StringValue (fst table) ] | table <- database ]
@@ -677,14 +698,6 @@ executeStatement _ _ = Left $ "Unknown unsupported statement"
 nullOrAny :: (Foldable t) => (a -> Bool) -> t a -> Bool
 nullOrAny f x = null x || any f x
 
-getUsedTables :: [String] -> [(TableName, DataFrame)] -> Either ErrorMessage [(TableName, DataFrame)]
-getUsedTables names database = getUsedTables' names database []
-    where
-        getUsedTables' :: [String] -> [(TableName, DataFrame)] -> [(TableName, DataFrame)] -> Either ErrorMessage [(TableName, DataFrame)]
-        getUsedTables' (name:names) database acc = case lookup name database of
-            Just dataframe -> getUsedTables' names database ((name, dataframe):acc)
-            _ -> Left $ "Could not find table " ++ name ++ " in database"
-        getUsedTables' [] _ acc = Right $ reverse acc
 
 -- -- Applies where filters and column selection to a table, creating a new table
 -- createFilteredTable :: DataFrame
@@ -754,3 +767,6 @@ ifElse b x y
 
 guardCheck :: Bool -> ErrorMessage -> Either ErrorMessage ()
 guardCheck b failMessage = ifElse b (Left failMessage) (Right ())
+
+getColumnNames :: [Column] -> [String]
+getColumnNames columns = [colName | (Column colName _) <- columns]
