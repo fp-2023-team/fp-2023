@@ -554,6 +554,7 @@ parseCompare _ _ = False
 -- InMemoryTables.databases a source of data.
 executeStatement :: ParsedStatement -> [(TableName, DataFrame)] -> Either ErrorMessage DataFrame
 executeStatement (SelectStatement selectColumns' tableNames' whereArgs') database' = do
+    _ <- Left $ "Select statement unsupported"
     usedTables <- getUsedTables tableNames' database
     _ <- guardCheck (null selectColumns') $ "Zero columns in 'select'"
    -- _ <- if nullOrAny (null) (fmap findTableByName tableNames') then
@@ -571,7 +572,8 @@ executeStatement (SelectStatement selectColumns' tableNames' whereArgs') databas
                     Just dataframe -> getUsedTables' names database ((name, dataframe):acc)
                     _ -> Left $ "Could not find table " ++ name ++ " in database"
                 getUsedTables' [] _ acc = Right $ reverse acc
-executeStatement (ShowTableStatement tableToShow') database' =
+executeStatement (ShowTableStatement tableToShow') database' = do
+    _ <- Left $ "Show statement unsupported"
     case tableToShow' of
         Nothing -> Right $ DataFrame
             [ Column "table_name" StringType ]
@@ -584,11 +586,13 @@ executeStatement (ShowTableStatement tableToShow') database' =
                 [ Column "column_name" StringType, Column "column_type" StringType]
                 [ [StringValue name, StringValue $ show colType] | Column name colType <- cols ]
 executeStatement (UpdateStatement tableName' assignedValues' whereArgs') database' = do
+    _ <- Left $ "Update statement unsupported"
     table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
         (Right)
         (lookup tableName' database')
     Left $ "Update statement unsupported"
 executeStatement (InsertIntoStatement tableName' valuesOrder' values') database' = do
+    _ <- Left $ "Insert statement unsupported"
     table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
         (Right)
         (lookup tableName' database')
@@ -598,6 +602,7 @@ executeStatement (InsertIntoStatement tableName' valuesOrder' values') database'
         _ -> do
             Left $ "Insert statement unsupported"
 executeStatement (DeleteStatement tableName' whereArgs') database' = do
+    _ <- Left $ "Delete statement unsupported"
     table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
         (Right)
         (lookup tableName' database')
