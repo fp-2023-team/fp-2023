@@ -5,9 +5,7 @@ module Lib2
     executeStatement,
     ParsedStatement (..),
     WhereOperand (..),
-    showParsedStatementType,
-    valueCompatibleWithColumn,
-    alignValues
+    listCartesianProduct
   )
 where
 
@@ -562,26 +560,34 @@ executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' 
         $ "Zero columns in 'select'"
     _ <- guardCheck (any (isLeft) selectArgs' && any (isRight) selectArgs')
         $ "Cannot use both functions and select columns in 'select'"
-    usedTables <- getUsedTables tableNames' database
+    usedTables <- getUsedTables tableNames' database'
     _ <- guardCheck (null usedTables)
         $ "No tables in 'from'"
-    let (firstTable:tables) = usedTables
-    _ <- Left $ show firstTable
-   -- _ <- if nullOrAny (null) (fmap findTableByName tableNames') then
+    let namedHell = map (createNamedRows) usedTables
+    let cartesianHell = listCartesianProduct namedHell
+    _ <- Left $ show cartesianHell
+    -- _ <- if nullOrAny (null) (fmap findTableByName tableNames') then
    --         Left "Couldn't find at least one table in the database"
    --     else
    --         Right 0
     Left $ "Select statement unsupported"
     where
         getUsedTables :: [String] -> [(TableName, DataFrame)] -> Either ErrorMessage [(TableName, DataFrame)]
-        getUsedTables names database = getUsedTables' names database []
+        getUsedTables names db = getUsedTables' names db []
             where
                 getUsedTables' :: [String] -> [(TableName, DataFrame)] -> [(TableName, DataFrame)]
                     -> Either ErrorMessage [(TableName, DataFrame)]
-                getUsedTables' (name:names) database acc = case lookup name database of
-                    Just dataframe -> getUsedTables' names database ((name, dataframe):acc)
-                    _ -> Left $ "Could not find table " ++ name ++ " in database"
+                getUsedTables' (x:xs) db acc = case lookup x db of
+                    Just dataframe -> getUsedTables' xs db ((x, dataframe):acc)
+                    _ -> Left $ "Could not find table " ++ x ++ " in db"
                 getUsedTables' [] _ acc = Right $ reverse acc
+        createNamedRows :: (TableName, DataFrame) -> [[((Maybe String, String), Value)]]
+        createNamedRows (tableName, DataFrame cols rows) = [[((Just tableName, colName), row)
+                | (colName, row) <- innerList]
+            | innerList <- [zip colNames row | row <- rows]]
+            where
+                colNames :: [String]
+                colNames = getColumnNames cols
 executeStatement (ShowTableStatement tableToShow') database' = do
     case tableToShow' of
         Nothing -> Right $ DataFrame
@@ -643,12 +649,12 @@ executeStatement (InsertIntoStatement tableName' valuesOrder' values') database'
         $ "All values must be explicitly written in 'values'"
     _ <- guardCheck (maybe False (\x -> length values' /= length x) valuesOrder')
         $ "Length mismatch between column names and column values"
-    let assignedValues = maybe (zip (getColumnNames cols) values') (\x -> zip x values') valuesOrder'
-    _ <- guardCheck (not $ valuesCompatibleWithColumns assignedValues cols)
+    let assignedValues' = maybe (zip (getColumnNames cols) values') (\x -> zip x values') valuesOrder'
+    _ <- guardCheck (not $ valuesCompatibleWithColumns assignedValues' cols)
         $ "At least one value is incompatible with column in 'values'"
     _ <- guardCheck (maybe False (\x -> any (\y -> notElem y colNames) x) valuesOrder')
         $ "At least one value column name is not a valid column in table"
-    let newRow = (snd $ unzip (alignValues assignedValues colNames))
+    let newRow = (snd $ unzip (alignValues assignedValues' colNames))
     Right $ DataFrame
         cols
         (reverse (newRow:(reverse rows)))
@@ -869,3 +875,14 @@ valuesCompatibleWithColumns xs ys = all (\(name, value) -> case lookup name (zip
 -- First argument - what to align, second argument - with what to align
 alignValues :: Eq a => [(a, b)] -> [a] -> [(a, b)]
 alignValues whats withWhats = [what | withWhat <- withWhats, what@(whatArg, _) <- whats, withWhat == whatArg]
+
+
+cartesianProduct :: [[a]] -> [[a]] -> [[a]]
+cartesianProduct xs ys = [x ++ y | x <- xs, y <- ys]
+listCartesianProduct :: [[[a]]] -> [[a]]
+listCartesianProduct [] = []
+listCartesianProduct (x:xs) = listCartesianProduct' xs x
+    where
+        listCartesianProduct' :: [[[a]]] -> [[a]] -> [[a]]
+        listCartesianProduct' [] acc = acc
+        listCartesianProduct' (y:ys) acc = listCartesianProduct' ys (cartesianProduct acc y)
