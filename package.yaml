@@ -42,6 +42,8 @@ library:
     - free
     - time
     - transformers
+    - aeson
+    - bytestring
     - json
 
 executables:
@@ -83,6 +85,8 @@ executables:
       - terminal-size
       - free
       - time
+      - aeson
+      - bytestring
       - json
 
 tests:
