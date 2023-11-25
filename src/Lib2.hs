@@ -26,28 +26,28 @@ type WhereOperator = (String -> String -> Bool)
 data ParsedStatement = SelectStatement {
         -- Either single max(column_name), sum(column_name) or list of column names
         --Right side: Maybe String = table name (optional), String = collumn name
-        selectColumns :: [Either ([(Maybe String, String)], Function) (Maybe String, String)],
+        selectArgs :: [Either ([(Maybe String, String)], Function) (Maybe String, String)],
         -- Table names
-        tableNames :: [String],
+        fromArgs :: [String],
         -- All 'where' args are column_name0 ?=? column_name1 ORed
         whereArgs :: [(WhereOperand, WhereOperand, WhereOperator)]
     }
     | ShowTableStatement {
         -- Either TABLES or TABLE name[, ...]
-        tableToShow :: Maybe String
+        showTableArgs :: Maybe String
     }
     | UpdateStatement {
-      tableName :: String,
+      tablename :: String,
       assignedValues :: [(String, Value)],
       whereArgs :: [(WhereOperand, WhereOperand, WhereOperator)]
     }
     | InsertIntoStatement {
-      tableName :: String,
+      tablename :: String,
       valuesOrder :: Maybe [String],
       values :: [Value]
     }
     | DeleteStatement {
-      tableName :: String,
+      tablename :: String,
       whereArgs :: [(WhereOperand, WhereOperand, WhereOperator)]
     }
     --deriving (Eq) IDK what this does just temporary this
@@ -162,7 +162,7 @@ parseSelect x = do
   x1 <- parseSelectArgs x
   (rem, parsedStatement) <- parseFromArgs x1
   parsedWhereArgs <- parseWhereArgs rem
-  return (SelectStatement { selectColumns = (selectColumns parsedStatement), tableNames = (tableNames parsedStatement), whereArgs = parsedWhereArgs})
+  return (SelectStatement { selectArgs = (selectArgs parsedStatement), fromArgs = (fromArgs parsedStatement), whereArgs = parsedWhereArgs})
   where
     parseSelectArgs :: String -> Either ErrorMessage (String, ParsedStatement)
     parseSelectArgs [] = Left "Reached unknown state"
@@ -172,12 +172,12 @@ parseSelect x = do
       (_, ';', _) -> Left "Missing from statememnt"
       (x, ' ', xs) -> do
                         fullName <- parseFullCollumnName x 
-                        Right (xs, SelectStatement { selectColumns = [Right fullName]})
+                        Right (xs, SelectStatement { selectArgs = [Right fullName]})
       (x, ',', xs) -> case (parseSelectArgs xs) of
         Left e -> Left e
         Right (parseRem, parseRes) -> do
                                         fullName <- parseFullCollumnName x 
-                                        Right (parseRem, SelectStatement { selectColumns = (((Right fullName) : (selectColumns parseRes)))})
+                                        Right (parseRem, SelectStatement { selectArgs = (((Right fullName) : (selectArgs parseRes)))})
       (x, '(', xs) -> do
         (bracketStuff, rem) <- parseBrackets xs
         func <- getFunction x
@@ -186,10 +186,10 @@ parseSelect x = do
                   else parseFuncArgs bracketStuff "arg"
         fullNames <- parseAllFullCollumnNames args
         result <- if ((getTermination rem) == ' ' && (head rem) == ' ') then 
-                      Right (rem, SelectStatement { selectColumns = [Left (fullNames, func)]})
+                      Right (rem, SelectStatement { selectArgs = [Left (fullNames, func)]})
                   else if((getTermination rem) == ',') then case (parseSelectArgs (trpl3 (parseWord rem))) of
                       Left e -> Left e
-                      Right (parseRem, parseRes) -> Right (parseRem, SelectStatement { selectColumns = (Left (fullNames, func)) : (selectColumns parseRes)})
+                      Right (parseRem, parseRes) -> Right (parseRem, SelectStatement { selectArgs = (Left (fullNames, func)) : (selectArgs parseRes)})
                   else Left $ "Unexpected " ++ [getTermination rem] ++ " after (" ++ (head args) ++ ")"
         return (result)
 
@@ -202,10 +202,10 @@ parseSelect x = do
         where
           parseFromArgs' :: (String, ParsedStatement) -> Either ErrorMessage (String, ParsedStatement)
           parseFromArgs' (a, b) = case (parseWord a) of
-            (x, sym, xs) | elem sym "; " -> Right (xs, SelectStatement { selectColumns = (selectColumns b), tableNames = [x]})
+            (x, sym, xs) | elem sym "; " -> Right (xs, SelectStatement { selectArgs = (selectArgs b), fromArgs = [x]})
             (x, sym, xs) | elem sym ","  -> case (parseFromArgs' (xs, b)) of
                 Left e -> Left e
-                Right (parseRem, parseRes) -> Right (parseRem, SelectStatement { selectColumns = (selectColumns parseRes), tableNames = (x : (tableNames parseRes))})
+                Right (parseRem, parseRes) -> Right (parseRem, SelectStatement { selectArgs = (selectArgs parseRes), fromArgs = (x : (fromArgs parseRes))})
             (x, sym, _)  | x == ""   -> Left $ "Unexpected " ++ [sym]
                          | otherwise -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
               where parseResult = parseFromArgs' (xs, b)
@@ -292,11 +292,11 @@ parseInsert a = do
     then do
       (parsedTablename, nextSym, rem) <- do
         (parsedWord, symbol, parseRem) <- Right $ parseWord xs
-        tableNameresult <- case (symbol) of
+        tablenameresult <- case (symbol) of
           termSym | elem termSym " (" -> Right (parsedWord, symbol, parseRem)
                   | termSym == ';' -> Left "Missing values in INSERT statement"
           otherwise -> Left $ "Unexpected " ++ [symbol] ++ " after " ++ parsedWord
-        return (tableNameresult)
+        return (tablenameresult)
       (parsedValuesOrder, rem2) <- if(nextSym == '(') then parseCollumnnameList rem else Right ([], rem)
       parsedValues <- do
         (keyword, symbol, parseRem) <- Right $ parseWord rem2
@@ -306,7 +306,7 @@ parseInsert a = do
             then if(symbol == ';') then Left "Missing value list" else Left $ "Unexpected " ++ [symbol] ++ " after " ++ parseRem 
             else Left $ "Unrecognised keyword: " ++ keyword
         return (valuesResult)
-      return (InsertIntoStatement { tableName = parsedTablename, valuesOrder = ifEmptyReturnNothing parsedValuesOrder, values = parsedValues})
+      return (InsertIntoStatement { tablename = parsedTablename, valuesOrder = ifEmptyReturnNothing parsedValuesOrder, values = parsedValues})
     else Left "Unrecognised keyword after INSERT"
   return (result)
   where
@@ -323,8 +323,8 @@ parseUpdate a = do
   result <- case (termChar) of
     ' ' -> do
       parseRes <- parseWhereArgs rem2
-      Right $ UpdateStatement {tableName = parsedTablename, assignedValues = newAssignedValues, whereArgs = parseRes}
-    ';' -> Right UpdateStatement {tableName = parsedTablename, assignedValues = newAssignedValues, whereArgs = []}
+      Right $ UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues, whereArgs = parseRes}
+    ';' -> Right UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues, whereArgs = []}
     otherwise -> Left $ "Unexpected " ++ [termChar] ++ " after values assignment"
   return (result)
 
@@ -364,8 +364,8 @@ parseValue a = do
       else case (parseConstant remainder) of
         ("", "") -> Left "Missing \' character"
         ("", _) -> Left "Value inside \'\' can not be empty"
-        (constant, constantRemainder) -> Right (StringValue constant, sym, trpl3(parseWord constantRemainder))
-    tempSym -> case (parsedWord) of
+        (constant, constantRemainder) -> Right (StringValue constant, getTermination constantRemainder, removeCharIfTerminating constantRemainder)
+    _ -> case (parsedWord) of
       word | parseCompare word "null" -> Right (NullValue, sym, remainder)
            | parseCompare word "true" -> Right (BoolValue True, sym, remainder)
            | isNumber word -> Right (IntegerValue $ getNumber word, sym, remainder)
@@ -380,8 +380,8 @@ parseDelete a = do
   result <- case (sym) of
     ' ' -> do
       parsedWhereArgs <- parseWhereArgs rem2
-      Right $ DeleteStatement {tableName = parsedTablename, whereArgs = parsedWhereArgs}
-    ';' -> Right $ DeleteStatement {tableName = parsedTablename, whereArgs = []}
+      Right $ DeleteStatement {tablename = parsedTablename, whereArgs = parsedWhereArgs}
+    ';' -> Right $ DeleteStatement {tablename = parsedTablename, whereArgs = []}
     otherwise -> Left $ "Unexpected " ++ [sym] ++ " after " ++ parsedTablename
   return (result)
 
@@ -534,7 +534,7 @@ parseShow a = case (parseKeyword a) of
   Left e -> Left e
   Right (x, xs) -> if (parseCompare x "tables")
     then if (xs == "") 
-      then Right ShowTableStatement { tableToShow = Nothing } 
+      then Right ShowTableStatement { showTableArgs = Nothing } 
       else Left "Too many arguments in show tables command"
     else if(parseCompare x "table")
       then if (xs /= "") then parseTableName xs else Left "Missing table arguments"
@@ -542,7 +542,7 @@ parseShow a = case (parseKeyword a) of
 
 parseTableName :: String -> Either ErrorMessage ParsedStatement
 parseTableName a = case (parseWord a) of
-  (result, ';', _) -> Right ShowTableStatement { tableToShow = Just result}
+  (result, ';', _) -> Right ShowTableStatement { showTableArgs = Just result}
   _ -> Left "Too many arguments in show table statement"
 
 parseEndSemicolon :: String -> String
