@@ -160,7 +160,7 @@ parseSelect x = do
   x1 <- parseSelectArgs x
   (rem, parsedStatement) <- parseFromArgs x1
   parsedWhereArgs <- parseWhereArgs rem
-  return (SelectStatement { selectArgs = (selectArgs parsedStatement), fromArgs = (fromArgs parsedStatement), whereArgs = parsedWhereArgs})
+  return (SelectStatement { selectColumns = (selectColumns parsedStatement), tableNames = (tableNames parsedStatement), whereArgs = parsedWhereArgs})
   where
     parseSelectArgs :: String -> Either ErrorMessage (String, ParsedStatement)
     parseSelectArgs [] = Left "Reached unknown state"
@@ -321,8 +321,8 @@ parseUpdate a = do
   result <- case (termChar) of
     ' ' -> do
       parseRes <- parseWhereArgs rem2
-      Right $ UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues, whereArgs = parseRes}
-    ';' -> Right UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues, whereArgs = []}
+      Right $ UpdateStatement {tableName = parsedTablename, assignedValues = newAssignedValues, whereArgs = parseRes}
+    ';' -> Right UpdateStatement {tableName = parsedTablename, assignedValues = newAssignedValues, whereArgs = []}
     otherwise -> Left $ "Unexpected " ++ [termChar] ++ " after values assignment"
   return (result)
 
@@ -378,8 +378,8 @@ parseDelete a = do
   result <- case (sym) of
     ' ' -> do
       parsedWhereArgs <- parseWhereArgs rem2
-      Right $ DeleteStatement {tablename = parsedTablename, whereArgs = parsedWhereArgs}
-    ';' -> Right $ DeleteStatement {tablename = parsedTablename, whereArgs = []}
+      Right $ DeleteStatement {tableName = parsedTablename, whereArgs = parsedWhereArgs}
+    ';' -> Right $ DeleteStatement {tableName = parsedTablename, whereArgs = []}
     otherwise -> Left $ "Unexpected " ++ [sym] ++ " after " ++ parsedTablename
   return (result)
 
