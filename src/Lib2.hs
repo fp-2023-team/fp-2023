@@ -5,7 +5,9 @@ module Lib2
     executeStatement,
     ParsedStatement (..),
     WhereOperand (..),
-    showParsedStatementType
+    showParsedStatementType,
+    valueCompatibleWithColumn,
+    alignValues
   )
 where
 
@@ -556,7 +558,6 @@ parseCompare _ _ = False
 -- InMemoryTables.databases a source of data.
 executeStatement :: ParsedStatement -> [(TableName, DataFrame)] -> Either ErrorMessage DataFrame
 executeStatement (SelectStatement selectColumns' tableNames' whereArgs') database' = do
-    _ <- Left $ "Select statement unsupported"
     usedTables <- getUsedTables tableNames' database
     _ <- guardCheck (null selectColumns') $ "Zero columns in 'select'"
    -- _ <- if nullOrAny (null) (fmap findTableByName tableNames') then
@@ -575,7 +576,6 @@ executeStatement (SelectStatement selectColumns' tableNames' whereArgs') databas
                     _ -> Left $ "Could not find table " ++ name ++ " in database"
                 getUsedTables' [] _ acc = Right $ reverse acc
 executeStatement (ShowTableStatement tableToShow') database' = do
-    _ <- Left $ "Show statement unsupported"
     case tableToShow' of
         Nothing -> Right $ DataFrame
             [ Column "table_name" StringType ]
@@ -588,35 +588,50 @@ executeStatement (ShowTableStatement tableToShow') database' = do
                 [ Column "column_name" StringType, Column "column_type" StringType]
                 [ [StringValue name, StringValue $ show colType] | Column name colType <- cols ]
 executeStatement (UpdateStatement tableName' assignedValues' whereArgs') database' = do
-    _ <- Left $ "Update statement unsupported"
     table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
         (Right)
         (lookup tableName' database')
+    let colNames = getColumnNames cols
+    let (updateColNames, updateColValues) = unzip assignedValues'
+    _ <- guardCheck (any (\x -> notElem x colNames) updateColNames)
+        $ "Non-existing columns referenced in 'set'"
+    --_ <- guardCheck (not $ all (\(name, value) -> let Just col = lookup name (zip tableColNames cols) in valueCompatibleWithColumn value col) assignedValues')
+    --    $ "At least one value type incompatible with column"
     Left $ "Update statement unsupported"
 executeStatement (InsertIntoStatement tableName' valuesOrder' values') database' = do
-    _ <- Left $ "Insert statement unsupported"
     table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
         (Right)
         (lookup tableName' database')
-    case valuesOrder' of
-        Just names -> do
-            Left $ "Insert statement unsupported"
-        _ -> do
-            Left $ "Insert statement unsupported"
+    let colNames = getColumnNames cols
+    _ <- guardCheck (length values' /= length cols)
+        $ "All values must be explicitly written in 'values'"
+    _ <- guardCheck (maybe False (\x -> length values' /= length x) valuesOrder')
+        $ "Length mismatch between column names and column values"
+    _ <- guardCheck (maybe False (\x -> any (\y -> notElem y colNames) x) valuesOrder')
+        $ "At least one value column name is not a valid column in table"
+    let assignedValues = maybe (zip (getColumnNames cols) values') (\x -> zip x values') valuesOrder'
+    _ <- guardCheck (not $ valuesCompatibleWithColumns assignedValues cols)
+        $ "At least one incompatible value with column in 'values'"
+    let newRow = (snd $ unzip (alignValues assignedValues colNames))
+    Right $ DataFrame
+        cols
+        (reverse (newRow:(reverse rows)))
 executeStatement (DeleteStatement tableName' whereArgs') database' = do
-    _ <- Left $ "Delete statement unsupported"
     table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
         (Right)
         (lookup tableName' database')
-    _ <- guardCheck (all (\colName -> any (== colName) (getColumnNames cols)) colNames)
+    let colNames = getColumnNames cols
+    _ <- guardCheck (any (\colName -> notElem colName (getColumnNames cols)) whereColNames)
         $ "Non-existing columns referenced in 'where'"
-    ----let colNames = [colName | ((ColumnName _ colName) _) <- whereArgs'] ++ [colName | ((ColumnName_ colName)  _  _) <- whereArgs']
-    --Right $ DataFrame columns [row | row <- rows]
-    Left $ "Delete statement unsupported"
+    Right $ DataFrame
+        cols
+        rows
     where
-        colNames :: [String]
-        colNames = [colName | ((ColumnName (_, colName)), _, _) <- whereArgs']
+        whereColNames :: [String]
+        whereColNames = [colName | ((ColumnName (_, colName)), _, _) <- whereArgs']
             ++ [colName | (_, (ColumnName (_, colName)), _) <- whereArgs']
+        executeWhere :: [(String, Value)] -> [(WhereOperand, WhereOperand, WhereOperator)] -> Bool
+        executeWhere _ _ = False
         --checkAllColNames :: [String] -> [Column] -> Bool
         --checkAllColNames colNames cols = 
 executeStatement _ _ = Left $ "Unknown unsupported statement"
@@ -786,3 +801,20 @@ showParsedStatementType x = case x of
     Right (InsertIntoStatement _ _ _) -> "InsertIntoStatement"
     Right (DeleteStatement _ _) -> "DeleteStatement"
     _ -> "ErrorMessage"
+
+valueCompatibleWithColumn :: Value -> Column -> Bool
+valueCompatibleWithColumn (IntegerValue _) (Column _ IntegerType) = True
+valueCompatibleWithColumn (StringValue _) (Column _ StringType) = True
+valueCompatibleWithColumn (BoolValue _) (Column _ BoolType) = True
+valueCompatibleWithColumn (NullValue) _ = True
+valueCompatibleWithColumn _ _ = False
+
+valuesCompatibleWithColumns :: [(String, Value)] -> [Column] -> Bool
+valuesCompatibleWithColumns xs ys = all (\(name, value) -> case lookup name (zip (getColumnNames ys) ys) of
+    Nothing -> False
+    Just y -> valueCompatibleWithColumn value y)
+    xs
+
+-- First argument - what to align, second argument - with what to align
+alignValues :: Eq a => [(a, b)] -> [a] -> [(a, b)]
+alignValues whats withWhats = [what | withWhat <- withWhats, what@(whatArg, _) <- whats, withWhat == whatArg]
