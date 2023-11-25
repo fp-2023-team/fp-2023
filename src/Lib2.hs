@@ -593,11 +593,12 @@ executeStatement (UpdateStatement tableName' assignedValues' whereArgs') databas
         (lookup tableName' database')
     let colNames = getColumnNames cols
     let (updateColNames, updateColValues) = unzip assignedValues'
-    _ <- guardCheck (any (\x -> notElem x colNames) updateColNames)
-        $ "Non-existing columns referenced in 'set'"
+    Right $ table
+    --_ <- guardCheck (any (\x -> notElem x colNames) updateColNames)
+    --    $ "Non-existing columns referenced in 'set'"
     --_ <- guardCheck (not $ all (\(name, value) -> let Just col = lookup name (zip tableColNames cols) in valueCompatibleWithColumn value col) assignedValues')
     --    $ "At least one value type incompatible with column"
-    Left $ "Update statement unsupported"
+    --Left $ "Update statement unsupported"
 executeStatement (InsertIntoStatement tableName' valuesOrder' values') database' = do
     table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
         (Right)
