@@ -592,12 +592,40 @@ executeStatement (UpdateStatement tableName' assignedValues' whereArgs') databas
         (Right)
         (lookup tableName' database')
     let colNames = getColumnNames cols
+    let colLookupList = zip colNames cols
+    _ <- guardCheck (any (\(name, _) -> notElem name colNames) assignedValues')
+        $ "Non-existant columns referenced in 'set'"
+    _ <- guardCheck (not $ all (\(name, value) -> let Just col = lookup name colLookupList in valueCompatibleWithColumn value col) assignedValues')
+        $ "At least one value is incompatible with column in 'set'"
+    _ <- guardCheck (any (\name -> notElem name colNames) whereColNames)
+        $ "Non-existant columns referenced in 'where'"
     let (updateColNames, updateColValues) = unzip assignedValues'
-    Right $ table
-    --_ <- guardCheck (any (\x -> notElem x colNames) updateColNames)
-    --    $ "Non-existing columns referenced in 'set'"
-    --_ <- guardCheck (not $ all (\(name, value) -> let Just col = lookup name (zip tableColNames cols) in valueCompatibleWithColumn value col) assignedValues')
-    --    $ "At least one value type incompatible with column"
+    Right $ DataFrame
+        cols
+        [ifElse (executeWhere (zip colNames row) whereArgs')
+            (applyChanges (zip colNames row) assignedValues')
+            row
+            | row <- rows]
+    where
+        whereColNames :: [String]
+        whereColNames = [colName | ((ColumnName (_, colName)), _, _) <- whereArgs']
+            ++ [colName | (_, (ColumnName (_, colName)), _) <- whereArgs']
+        applyChanges :: [(String, Value)] -> [(String, Value)] -> [Value]
+        applyChanges xs ys = [maybe value (id) (lookup name ys) | x@(name, value) <- xs]
+            where
+        executeWhere :: [(String, Value)] -> [(WhereOperand, WhereOperand, WhereOperator)] -> Bool
+        executeWhere namedRows whereOperations = nullOrAny (\(lVal, rVal, op) -> do
+            let lVal' = getValue lVal
+            let rVal' = getValue rVal
+            op lVal' rVal')
+            whereOperations
+            where
+                getValue :: WhereOperand -> String
+                getValue x = case x of
+                    Constant str -> str
+                    ColumnName (_, str) -> case lookup str namedRows of
+                        Just (StringValue val) -> val
+                        _ -> ""
     --Left $ "Update statement unsupported"
 executeStatement (InsertIntoStatement tableName' valuesOrder' values') database' = do
     table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
@@ -608,11 +636,11 @@ executeStatement (InsertIntoStatement tableName' valuesOrder' values') database'
         $ "All values must be explicitly written in 'values'"
     _ <- guardCheck (maybe False (\x -> length values' /= length x) valuesOrder')
         $ "Length mismatch between column names and column values"
-    _ <- guardCheck (maybe False (\x -> any (\y -> notElem y colNames) x) valuesOrder')
-        $ "At least one value column name is not a valid column in table"
     let assignedValues = maybe (zip (getColumnNames cols) values') (\x -> zip x values') valuesOrder'
     _ <- guardCheck (not $ valuesCompatibleWithColumns assignedValues cols)
-        $ "At least one incompatible value with column in 'values'"
+        $ "At least one value is incompatible with column in 'values'"
+    _ <- guardCheck (maybe False (\x -> any (\y -> notElem y colNames) x) valuesOrder')
+        $ "At least one value column name is not a valid column in table"
     let newRow = (snd $ unzip (alignValues assignedValues colNames))
     Right $ DataFrame
         cols
@@ -623,16 +651,31 @@ executeStatement (DeleteStatement tableName' whereArgs') database' = do
         (lookup tableName' database')
     let colNames = getColumnNames cols
     _ <- guardCheck (any (\colName -> notElem colName (getColumnNames cols)) whereColNames)
-        $ "Non-existing columns referenced in 'where'"
+        $ "Non-existant columns referenced in 'where'"
+    _ <- guardCheck (any (\colName -> let Just x = lookup colName (zip colNames cols) in not $ isStringColumn x) whereColNames)
+        $ "Only string columns allowed in 'where'"
     Right $ DataFrame
         cols
-        rows
+        [row | row <- rows, not $ executeWhere (zip colNames row) whereArgs']
     where
+        isStringColumn :: Column -> Bool
+        isStringColumn (Column _ StringType) = True
+        isStringColumn _ = False
         whereColNames :: [String]
         whereColNames = [colName | ((ColumnName (_, colName)), _, _) <- whereArgs']
             ++ [colName | (_, (ColumnName (_, colName)), _) <- whereArgs']
         executeWhere :: [(String, Value)] -> [(WhereOperand, WhereOperand, WhereOperator)] -> Bool
-        executeWhere _ _ = False
+        executeWhere namedRows whereOperations = any (\(lVal, rVal, op) -> do
+            let lVal' = getValue lVal
+            let rVal' = getValue rVal
+            op lVal' rVal')
+            whereOperations
+            where
+                getValue :: WhereOperand -> String
+                getValue x = case x of
+                    Constant str -> str
+                    ColumnName (_, str) -> case lookup str namedRows of
+                        Just (StringValue val) -> val
         --checkAllColNames :: [String] -> [Column] -> Bool
         --checkAllColNames colNames cols = 
 executeStatement _ _ = Left $ "Unknown unsupported statement"
