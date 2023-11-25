@@ -3,7 +3,70 @@
 # For more information, please see the documentation at:
 #   https://docs.haskellstack.org/en/stable/lock_files
 
-packages: []
+packages:
+- completed:
+    hackage: aeson-2.2.1.0@sha256:a23a61aada8233e10573e1612c0b2efe5a1aba0d59b05dbe2f63301822f136cb,6582
+    pantry-tree:
+      sha256: 8a50c54b9ecba80ecc3df3ea67faa4d155d6f6a6b3e342c74f3e6b0dcdc87e13
+      size: 83518
+  original:
+    hackage: aeson-2.2.1.0
+- completed:
+    hackage: integer-conversion-0.1.0.1@sha256:0e57a82635323f015b5d6c242bcfbbeeaa9854fe9c8058e57052254dbb24bb14,2250
+    pantry-tree:
+      sha256: 5684bd08f7edbadbff77d84075b37cdf41309bd8a0dc23bcea6ffbf4497adb7f
+      size: 509
+  original:
+    hackage: integer-conversion-0.1.0.1
+- completed:
+    hackage: text-iso8601-0.1@sha256:ac86f2500ca751db3c0de029dd7e7826bef7366d59dc0085b00fc695c43b9f76,2407
+    pantry-tree:
+      sha256: 2ce4c1ddd0672388ba61a8c921c05869b6bd88c4663c4d9bbf7cd9de1a607634
+      size: 427
+  original:
+    hackage: text-iso8601-0.1
+- completed:
+    hackage: th-abstraction-0.5.0.0@sha256:4351cadf6bf0ca80c90225bae0b12f4cfdd550f30c333b050186af5a8bc19457,2236
+    pantry-tree:
+      sha256: f1e547789ee75cf1d880c2dd6498254e9a37de052842b573b43c4b4a1ebcfd6d
+      size: 670
+  original:
+    hackage: th-abstraction-0.5.0.0
+- completed:
+    hackage: bytestring-0.11.5.3@sha256:3eee5d3658b657371d0f940f1f38feefc2ebdf8592a32d3d0734f28c61f80ba0,7595
+    pantry-tree:
+      sha256: bb97a05a67b1ea6c61af66e5abbbb0094bc397c1a930348442a41619026191ee
+      size: 4019
+  original:
+    hackage: bytestring-0.11.5.3
+- completed:
+    hackage: binary-0.8.9.1@sha256:81f468c1c75fd6535152ab69b2d32ac6cfcc03e345267b069abe4da56ec95801,6523
+    pantry-tree:
+      sha256: 956ecd662408f69615977b87a92e042abcdc447b7824b8aabf5788c4393c10c5
+      size: 1976
+  original:
+    hackage: binary-0.8.9.1
+- completed:
+    hackage: text-2.0.2@sha256:71b5fa8c64d3c1fd0a08f993463220867b08290a2256e94b0952bf0e8f5a45cc,9905
+    pantry-tree:
+      sha256: 25f3b6dd211e30f9e0ef5047bb9f30df7a9296cf1043873e31558196dfe78676
+      size: 7514
+  original:
+    hackage: text-2.0.2
+- completed:
+    hackage: parsec-3.1.17.0@sha256:6cf18e59d9f1c5b40385457b82ab679dc18d3c5bd3c2c67b2f94e1e8732e6624,5119
+    pantry-tree:
+      sha256: cca87377fcfe25583e1f7aadc4971111a86c2e66002dffa304be92f294db32c8
+      size: 2810
+  original:
+    hackage: parsec-3.1.17.0
+- completed:
+    hackage: haskeline-0.8.2.1@sha256:de3ea3ef41a19c9b04d4f4004d867fc286fca948db6aedb0bad32b99408abaee,6024
+    pantry-tree:
+      sha256: d9e282839b89b15110727b68cdd0d9539897b86954a922fbcdfc2961775a936f
+      size: 2955
+  original:
+    hackage: haskeline-0.8.2.1
 snapshots:
 - completed:
     sha256: 23bb9bb355bfdb1635252e120a29b712f0d5e8a6c6a65c5ab5bd6692f46c438e
