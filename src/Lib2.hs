@@ -557,9 +557,16 @@ parseCompare _ _ = False
 -- Executes a parsed statemet. Produces a DataFrame. Uses
 -- InMemoryTables.databases a source of data.
 executeStatement :: ParsedStatement -> [(TableName, DataFrame)] -> Either ErrorMessage DataFrame
-executeStatement (SelectStatement selectColumns' tableNames' whereArgs') database' = do
+executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' = do
+    _ <- guardCheck (null selectArgs')
+        $ "Zero columns in 'select'"
+    _ <- guardCheck (any (isLeft) selectArgs' && any (isRight) selectArgs')
+        $ "Cannot use both functions and select columns in 'select'"
     usedTables <- getUsedTables tableNames' database
-    _ <- guardCheck (null selectColumns') $ "Zero columns in 'select'"
+    _ <- guardCheck (null usedTables)
+        $ "No tables in 'from'"
+    let (firstTable:tables) = usedTables
+    _ <- Left $ show firstTable
    -- _ <- if nullOrAny (null) (fmap findTableByName tableNames') then
    --         Left "Couldn't find at least one table in the database"
    --     else
@@ -679,7 +686,7 @@ executeStatement (DeleteStatement tableName' whereArgs') database' = do
         --checkAllColNames :: [String] -> [Column] -> Bool
         --checkAllColNames colNames cols = 
 executeStatement _ _ = Left $ "Unknown unsupported statement"
--- executeStatement (SelectStatement selectColumns' tableNames' whereArgs') = case findTableByName database tableNames' of
+-- executeStatement (SelectStatement selectArgs' tableNames' whereArgs') = case findTableByName database tableNames' of
 --     Nothing -> Left $ "Could not find table " ++ tableNames'
 --     -- If the table was found,
 --     Just table@(DataFrame columns rows) ->
@@ -687,13 +694,13 @@ executeStatement _ _ = Left $ "Unknown unsupported statement"
 --         if (null selectColumnNames) then
 --             Left $ "Got zero columns to select"
 --         -- Ensure select only has selection by column value or only by function
---         else if (any (isLeft) selectColumns' && any(isRight) selectColumns') then
+--         else if (any (isLeft) selectArgs' && any(isRight) selectArgs') then
 --             Left $ "Cannot select by column value and by function at the same time"
 --         -- Wildcard only once
 --         else if (let (x:xs) = selectColumnNames in x == "*" && not (null xs)) then
 --             Left $ "Can only select all columns once"
 --         -- Cannot use wildcard with functions
---         else if (let (x:xs) = selectColumnNames in x == "*" && not (null (getOnlyLefts selectColumns'))) then
+--         else if (let (x:xs) = selectColumnNames in x == "*" && not (null (getOnlyLefts selectArgs'))) then
 --             Left $ "Cannot apply function to wildcard"
 --         ---- Check if the column names mentioned in the selection arguments actually exist,
 --         ---- fall-through for wildcard
@@ -713,18 +720,18 @@ executeStatement _ _ = Left $ "Unknown unsupported statement"
 --             let DataFrame columns' rows' = createFilteredTable table whereArgs'
 --             let columnValues = combineColumnsWithValues columns' (if null rows' then [map (\x -> NullValue) columns'] else rows') -- [(Column, [Value])]
 --             -- Check for wildcard, too
---             let selectColumns'' = let (x:_) = selectColumnNames in if x == "*" then [Right columnName | columnName <- tableColumnNames] else selectColumns'
---             case selectColumns'' of
---                 -- If selectColumns'' is Left, then it's (String, [Value] -> Value)
+--             let selectArgs'' = let (x:_) = selectColumnNames in if x == "*" then [Right columnName | columnName <- tableColumnNames] else selectArgs'
+--             case selectArgs'' of
+--                 -- If selectArgs'' is Left, then it's (String, [Value] -> Value)
 --                 (Left _:_) -> do
---                     let columnNamesAndFunctions = getOnlyLefts selectColumns''
+--                     let columnNamesAndFunctions = getOnlyLefts selectArgs''
 --                     -- Check if column names match and apply functions
 --                     let resultColumnValues = [(Column colName colType, [func $ values]) | (name, func) <- columnNamesAndFunctions, (Column colName colType, values) <- columnValues, name == colName]
 --                     let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
 --                     Right $ DataFrame (fst resultColumnsRows) (snd resultColumnsRows)
---                 -- If selectColumns'' is Right, then it's only String
+--                 -- If selectArgs'' is Right, then it's only String
 --                 (Right _:_) -> do
---                     let columnNames = getOnlyRights selectColumns''
+--                     let columnNames = getOnlyRights selectArgs''
 --                     -- Check if column names match
 --                     let resultColumnValues = [columnValue | columnName <- columnNames, columnValue@(Column name _, _) <- columnValues, columnName == name]
 --                     let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
@@ -734,7 +741,7 @@ executeStatement _ _ = Left $ "Unknown unsupported statement"
 --             tableColumnNames :: [String]
 --             tableColumnNames = [ columnName | Column columnName _ <- columns ]
 --             selectColumnNames :: [String]
---             selectColumnNames = map (getSelectColumnName) selectColumns'
+--             selectColumnNames = map (getSelectColumnName) selectArgs'
 --                 where
 --                     getSelectColumnName :: Either (String, [Value] -> Value) String -> String
 --                     getSelectColumnName (Right str) = str
