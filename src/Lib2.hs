@@ -425,11 +425,6 @@ parseConstantList a = do
       parseRes <- parseConstantList newrem
       Right $ manipulatedWord : parseRes
   return result
-  -- (x, ',', xs) -> do
-  --   (parseRes, rem) <- parseConstantList xs
-  --   return (x : parseRes, rem)
-  -- (x, ')', xs) -> Right ([x], xs)
-  -- (x, sym, _) -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
 
 isNumber :: String -> Bool
 isNumber [] = False
