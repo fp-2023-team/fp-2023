@@ -92,6 +92,15 @@ tableWithDuplicateColumns = (
         ]
     )
 
+tableNoRows :: (TableName, DataFrame)
+tableNoRows = (
+    "noRows",
+    DataFrame
+        [Column "x" StringType, Column "y" StringType]
+        []
+    )
+
 database :: [(TableName, DataFrame)]
 database = [tableEmployees, tableInvalid1, tableInvalid2,
-        tableLongStrings, tableWithNulls, tableWithDuplicateColumns]
+        tableLongStrings, tableWithNulls, tableWithDuplicateColumns,
+        tableNoRows]

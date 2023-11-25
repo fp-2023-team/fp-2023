@@ -5,7 +5,9 @@ module Lib2
     executeStatement,
     ParsedStatement (..),
     WhereOperand (..),
-    showParsedStatementType
+    showParsedStatementType,
+    valueCompatibleWithColumn,
+    alignValues
   )
 where
 
@@ -554,24 +556,101 @@ parseCompare _ _ = False
 
 -- Executes a parsed statemet. Produces a DataFrame. Uses
 -- InMemoryTables.databases a source of data.
-executeStatement :: ParsedStatement -> Either ErrorMessage DataFrame
-executeStatement _ = Left "Once again under renovation"
--- executeStatement :: ParsedStatement -> Either ErrorMessage DataFrame
--- executeStatement (SelectStatement selectArgs' fromArgs' whereArgs') = case findTableByName database fromArgs' of
---     Nothing -> Left $ "Could not find table " ++ fromArgs'
+executeStatement :: ParsedStatement -> [(TableName, DataFrame)] -> Either ErrorMessage DataFrame
+executeStatement (SelectStatement selectColumns' tableNames' whereArgs') database' = do
+    usedTables <- getUsedTables tableNames' database
+    _ <- guardCheck (null selectColumns') $ "Zero columns in 'select'"
+   -- _ <- if nullOrAny (null) (fmap findTableByName tableNames') then
+   --         Left "Couldn't find at least one table in the database"
+   --     else
+   --         Right 0
+    Left $ "Select statement unsupported"
+    where
+        getUsedTables :: [String] -> [(TableName, DataFrame)] -> Either ErrorMessage [(TableName, DataFrame)]
+        getUsedTables names database = getUsedTables' names database []
+            where
+                getUsedTables' :: [String] -> [(TableName, DataFrame)] -> [(TableName, DataFrame)]
+                    -> Either ErrorMessage [(TableName, DataFrame)]
+                getUsedTables' (name:names) database acc = case lookup name database of
+                    Just dataframe -> getUsedTables' names database ((name, dataframe):acc)
+                    _ -> Left $ "Could not find table " ++ name ++ " in database"
+                getUsedTables' [] _ acc = Right $ reverse acc
+executeStatement (ShowTableStatement tableToShow') database' = do
+    case tableToShow' of
+        Nothing -> Right $ DataFrame
+            [ Column "table_name" StringType ]
+            [ [ StringValue (fst table) ] | table <- database' ]
+        Just tableName' -> do
+            DataFrame cols _ <- maybe (Left $ "Could not find table " ++ tableName')
+                (Right)
+                (findTableByName database' tableName')
+            Right $ DataFrame
+                [ Column "column_name" StringType, Column "column_type" StringType]
+                [ [StringValue name, StringValue $ show colType] | Column name colType <- cols ]
+executeStatement (UpdateStatement tableName' assignedValues' whereArgs') database' = do
+    table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
+        (Right)
+        (lookup tableName' database')
+    let colNames = getColumnNames cols
+    let (updateColNames, updateColValues) = unzip assignedValues'
+    Right $ table
+    --_ <- guardCheck (any (\x -> notElem x colNames) updateColNames)
+    --    $ "Non-existing columns referenced in 'set'"
+    --_ <- guardCheck (not $ all (\(name, value) -> let Just col = lookup name (zip tableColNames cols) in valueCompatibleWithColumn value col) assignedValues')
+    --    $ "At least one value type incompatible with column"
+    --Left $ "Update statement unsupported"
+executeStatement (InsertIntoStatement tableName' valuesOrder' values') database' = do
+    table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
+        (Right)
+        (lookup tableName' database')
+    let colNames = getColumnNames cols
+    _ <- guardCheck (length values' /= length cols)
+        $ "All values must be explicitly written in 'values'"
+    _ <- guardCheck (maybe False (\x -> length values' /= length x) valuesOrder')
+        $ "Length mismatch between column names and column values"
+    _ <- guardCheck (maybe False (\x -> any (\y -> notElem y colNames) x) valuesOrder')
+        $ "At least one value column name is not a valid column in table"
+    let assignedValues = maybe (zip (getColumnNames cols) values') (\x -> zip x values') valuesOrder'
+    _ <- guardCheck (not $ valuesCompatibleWithColumns assignedValues cols)
+        $ "At least one incompatible value with column in 'values'"
+    let newRow = (snd $ unzip (alignValues assignedValues colNames))
+    Right $ DataFrame
+        cols
+        (reverse (newRow:(reverse rows)))
+executeStatement (DeleteStatement tableName' whereArgs') database' = do
+    table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
+        (Right)
+        (lookup tableName' database')
+    let colNames = getColumnNames cols
+    _ <- guardCheck (any (\colName -> notElem colName (getColumnNames cols)) whereColNames)
+        $ "Non-existing columns referenced in 'where'"
+    Right $ DataFrame
+        cols
+        rows
+    where
+        whereColNames :: [String]
+        whereColNames = [colName | ((ColumnName (_, colName)), _, _) <- whereArgs']
+            ++ [colName | (_, (ColumnName (_, colName)), _) <- whereArgs']
+        executeWhere :: [(String, Value)] -> [(WhereOperand, WhereOperand, WhereOperator)] -> Bool
+        executeWhere _ _ = False
+        --checkAllColNames :: [String] -> [Column] -> Bool
+        --checkAllColNames colNames cols = 
+executeStatement _ _ = Left $ "Unknown unsupported statement"
+-- executeStatement (SelectStatement selectColumns' tableNames' whereArgs') = case findTableByName database tableNames' of
+--     Nothing -> Left $ "Could not find table " ++ tableNames'
 --     -- If the table was found,
 --     Just table@(DataFrame columns rows) ->
 --         -- Ensure we have some select columns
 --         if (null selectColumnNames) then
 --             Left $ "Got zero columns to select"
 --         -- Ensure select only has selection by column value or only by function
---         else if (any (isLeft) selectArgs' && any(isRight) selectArgs') then
+--         else if (any (isLeft) selectColumns' && any(isRight) selectColumns') then
 --             Left $ "Cannot select by column value and by function at the same time"
 --         -- Wildcard only once
 --         else if (let (x:xs) = selectColumnNames in x == "*" && not (null xs)) then
 --             Left $ "Can only select all columns once"
 --         -- Cannot use wildcard with functions
---         else if (let (x:xs) = selectColumnNames in x == "*" && not (null (getOnlyLefts selectArgs'))) then
+--         else if (let (x:xs) = selectColumnNames in x == "*" && not (null (getOnlyLefts selectColumns'))) then
 --             Left $ "Cannot apply function to wildcard"
 --         ---- Check if the column names mentioned in the selection arguments actually exist,
 --         ---- fall-through for wildcard
@@ -591,18 +670,18 @@ executeStatement _ = Left "Once again under renovation"
 --             let DataFrame columns' rows' = createFilteredTable table whereArgs'
 --             let columnValues = combineColumnsWithValues columns' (if null rows' then [map (\x -> NullValue) columns'] else rows') -- [(Column, [Value])]
 --             -- Check for wildcard, too
---             let selectArgs'' = let (x:_) = selectColumnNames in if x == "*" then [Right columnName | columnName <- tableColumnNames] else selectArgs'
---             case selectArgs'' of
---                 -- If selectArgs'' is Left, then it's (String, [Value] -> Value)
+--             let selectColumns'' = let (x:_) = selectColumnNames in if x == "*" then [Right columnName | columnName <- tableColumnNames] else selectColumns'
+--             case selectColumns'' of
+--                 -- If selectColumns'' is Left, then it's (String, [Value] -> Value)
 --                 (Left _:_) -> do
---                     let columnNamesAndFunctions = getOnlyLefts selectArgs''
+--                     let columnNamesAndFunctions = getOnlyLefts selectColumns''
 --                     -- Check if column names match and apply functions
 --                     let resultColumnValues = [(Column colName colType, [func $ values]) | (name, func) <- columnNamesAndFunctions, (Column colName colType, values) <- columnValues, name == colName]
 --                     let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
 --                     Right $ DataFrame (fst resultColumnsRows) (snd resultColumnsRows)
---                 -- If selectArgs'' is Right, then it's only String
+--                 -- If selectColumns'' is Right, then it's only String
 --                 (Right _:_) -> do
---                     let columnNames = getOnlyRights selectArgs''
+--                     let columnNames = getOnlyRights selectColumns''
 --                     -- Check if column names match
 --                     let resultColumnValues = [columnValue | columnName <- columnNames, columnValue@(Column name _, _) <- columnValues, columnName == name]
 --                     let resultColumnsRows = uncombineColumnsFromValues resultColumnValues
@@ -612,7 +691,7 @@ executeStatement _ = Left "Once again under renovation"
 --             tableColumnNames :: [String]
 --             tableColumnNames = [ columnName | Column columnName _ <- columns ]
 --             selectColumnNames :: [String]
---             selectColumnNames = map (getSelectColumnName) selectArgs'
+--             selectColumnNames = map (getSelectColumnName) selectColumns'
 --                 where
 --                     getSelectColumnName :: Either (String, [Value] -> Value) String -> String
 --                     getSelectColumnName (Right str) = str
@@ -620,7 +699,7 @@ executeStatement _ = Left "Once again under renovation"
 --             whereColumnNames :: [String]
 --             whereColumnNames = concat [[a | (ColumnName a, _, _) <- whereArgs'],
 --                 [b | (_, ColumnName b, _) <- whereArgs']]
--- executeStatement (ShowTableStatement showTableArgs') = case showTableArgs' of
+-- executeStatement (ShowTableStatement tableToShow') = case tableToShow' of
 --     Nothing -> Right $ DataFrame
 --         [ Column "table_name" StringType ]
 --         [ [ StringValue (fst table) ] | table <- database ]
@@ -639,8 +718,9 @@ executeStatement _ = Left "Once again under renovation"
 --             return colType
 -- whereColumnIsStringType _ _ = True
 
--- nullOrAny :: (Foldable t) => (a -> Bool) -> t a -> Bool
--- nullOrAny f x = null x || any f x
+nullOrAny :: (Foldable t) => (a -> Bool) -> t a -> Bool
+nullOrAny f x = null x || any f x
+
 
 -- -- Applies where filters and column selection to a table, creating a new table
 -- createFilteredTable :: DataFrame
@@ -701,6 +781,19 @@ executeStatement _ = Left "Once again under renovation"
 --   ColumnName _ == Constant _ = False
 --   a /= b = not (a == b)
 --
+
+-- False - first, True - second
+ifElse :: Bool -> a -> a  -> a
+ifElse b x y
+    | b = x
+    | otherwise = y
+
+guardCheck :: Bool -> ErrorMessage -> Either ErrorMessage ()
+guardCheck b failMessage = ifElse b (Left failMessage) (Right ())
+
+getColumnNames :: [Column] -> [String]
+getColumnNames columns = [colName | (Column colName _) <- columns]
+
 showParsedStatementType :: Either ErrorMessage ParsedStatement -> String
 showParsedStatementType x = case x of
     Right (SelectStatement _ _ _) -> "SelectStatement"
@@ -709,3 +802,20 @@ showParsedStatementType x = case x of
     Right (InsertIntoStatement _ _ _) -> "InsertIntoStatement"
     Right (DeleteStatement _ _) -> "DeleteStatement"
     _ -> "ErrorMessage"
+
+valueCompatibleWithColumn :: Value -> Column -> Bool
+valueCompatibleWithColumn (IntegerValue _) (Column _ IntegerType) = True
+valueCompatibleWithColumn (StringValue _) (Column _ StringType) = True
+valueCompatibleWithColumn (BoolValue _) (Column _ BoolType) = True
+valueCompatibleWithColumn (NullValue) _ = True
+valueCompatibleWithColumn _ _ = False
+
+valuesCompatibleWithColumns :: [(String, Value)] -> [Column] -> Bool
+valuesCompatibleWithColumns xs ys = all (\(name, value) -> case lookup name (zip (getColumnNames ys) ys) of
+    Nothing -> False
+    Just y -> valueCompatibleWithColumn value y)
+    xs
+
+-- First argument - what to align, second argument - with what to align
+alignValues :: Eq a => [(a, b)] -> [a] -> [(a, b)]
+alignValues whats withWhats = [what | withWhat <- withWhats, what@(whatArg, _) <- whats, withWhat == whatArg]
