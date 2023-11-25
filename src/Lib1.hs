@@ -81,7 +81,12 @@ renderDataFrameAsTable givenTerminalWidth (DataFrame columns rows) =
     columnWidths = reduceWidths unboundColumnWidths
       where
         values = getValues columns rows
-        unboundColumnWidths = zipWith (curry (\(Column name _, width) -> max (length name) width)) columns (map (maximum . map valueWidth) values)
+        maximumWidth :: [Value] -> Int
+        maximumWidth columnValues
+          | not(null columnValues) = (maximum . map valueWidth) columnValues
+          | otherwise = 0
+        valueWidths = map maximumWidth values
+        unboundColumnWidths = zipWith (curry (\(Column name _, width) -> max (length name) width)) columns valueWidths
         reduceWidths :: [Int] -> [Int]
         reduceWidths widths
           | sum widths <= terminalWidth = widths
@@ -95,9 +100,9 @@ renderDataFrameAsTable givenTerminalWidth (DataFrame columns rows) =
     showValue :: Value -> String
     showValue (IntegerValue i) = show i
     showValue (StringValue str) = str
-    showValue (BoolValue True) = "True"
-    showValue (BoolValue False) = "False"
-    showValue NullValue = "null"
+    showValue (BoolValue True) = "1"
+    showValue (BoolValue False) = "0"
+    showValue NullValue = ""
 
     valueWidth :: Value -> Int
     valueWidth val = length $ showValue val
