@@ -18,8 +18,6 @@ import InMemoryTables (TableName)
 
 type ErrorMessage = String
 
-type Database = [(TableName, DataFrame)]
-
 -- Your code modifications go below this comment
 
 toLower :: Char -> Char
@@ -33,7 +31,7 @@ toLowerStr str = [toLower ch | ch <- str]
 -- 1) implement the function which returns a data frame by its name
 -- in provided Database list
 -- Credit: Almantas Mecele
-findTableByName :: Database -> String -> Maybe DataFrame
+findTableByName :: [(TableName, DataFrame)] -> String -> Maybe DataFrame
 findTableByName database tableName = lookup tableName database
 
 -- 2) implement the function which parses a "select * from ..."
@@ -83,7 +81,12 @@ renderDataFrameAsTable givenTerminalWidth (DataFrame columns rows) =
     columnWidths = reduceWidths unboundColumnWidths
       where
         values = getValues columns rows
-        unboundColumnWidths = zipWith (curry (\(Column name _, width) -> max (length name) width)) columns (map (maximum . map valueWidth) values)
+        maximumWidth :: [Value] -> Int
+        maximumWidth columnValues
+          | not(null columnValues) = (maximum . map valueWidth) columnValues
+          | otherwise = 0
+        valueWidths = map maximumWidth values
+        unboundColumnWidths = zipWith (curry (\(Column name _, width) -> max (length name) width)) columns valueWidths
         reduceWidths :: [Int] -> [Int]
         reduceWidths widths
           | sum widths <= terminalWidth = widths
@@ -97,9 +100,9 @@ renderDataFrameAsTable givenTerminalWidth (DataFrame columns rows) =
     showValue :: Value -> String
     showValue (IntegerValue i) = show i
     showValue (StringValue str) = str
-    showValue (BoolValue True) = "True"
-    showValue (BoolValue False) = "False"
-    showValue NullValue = "null"
+    showValue (BoolValue True) = "1"
+    showValue (BoolValue False) = "0"
+    showValue NullValue = ""
 
     valueWidth :: Value -> Int
     valueWidth val = length $ showValue val

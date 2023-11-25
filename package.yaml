@@ -44,6 +44,7 @@ library:
     - transformers
     - aeson
     - bytestring
+    - json
 
 executables:
   fp2023-select-all:
@@ -86,6 +87,7 @@ executables:
       - time
       - aeson
       - bytestring
+      - json
 
 tests:
   fp2023-test:

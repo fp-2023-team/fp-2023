@@ -66,3 +66,5 @@ runExecuteIO (Free step) = do
         -- probably you will want to extend the interpreter
         runStep :: Lib3.ExecutionAlgebra a -> IO a
         runStep (Lib3.GetTime next) = getCurrentTime >>= return . next
+        runStep (Lib3.SaveTable name content next) = writeFile ("./db/" ++ name ++ ".json") content >>= return . next
+        runStep (Lib3.LoadTable name next) = readFile ("./db/" ++ name ++ ".json") >>= return . next
