@@ -564,15 +564,24 @@ executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' 
     usedTables <- getUsedTables tableNames' database'
     _ <- guardCheck (null usedTables)
         $ "No tables in 'from'"
+    let allNamedCols = [((Just name, colName), col) | (name, DataFrame cols _) <- usedTables, col@(Column colName _) <- cols]
+    _ <- checkTableColsWithWhereColNames allNamedCols whereArgs'
     let namedHell = map (createNamedRows) usedTables
     let cartesianHell = listCartesianProduct namedHell
-    _ <- Left $ show cartesianHell
+    let filteredCartesianHell = filterByWhere cartesianHell whereArgs'
+    Right $ DataFrame
+        (decomposeListList [ifElse (let x:xs = usedTables in null xs) cols [Column (tableName ++ "." ++ colName) colType | (Column colName colType) <- cols] | (tableName, DataFrame cols _) <- usedTables])
+        (map (map (snd)) filteredCartesianHell)
+    --_ <- Left $ show filteredCartesianHell
     -- _ <- if nullOrAny (null) (fmap findTableByName tableNames') then
    --         Left "Couldn't find at least one table in the database"
    --     else
    --         Right 0
-    Left $ "Select statement unsupported"
+    --Left $ "Select statement unsupported"
     where
+        isStringColumn :: Column -> Bool
+        isStringColumn (Column _ StringType) = True
+        isStringColumn _ = False
         getUsedTables :: [String] -> [(TableName, DataFrame)] -> Either ErrorMessage [(TableName, DataFrame)]
         getUsedTables names db = getUsedTables' names db []
             where
@@ -589,6 +598,48 @@ executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' 
             where
                 colNames :: [String]
                 colNames = getColumnNames cols
+        checkTableColsWithWhereColNames :: [((Maybe TableName, String), Column)]
+            -> [(WhereOperand, WhereOperand, WhereOperator)]
+            -> Either ErrorMessage ()
+        checkTableColsWithWhereColNames tableNamedCols whereOps =
+            forEach (\whereColName acc -> if null acc
+                then acc
+                else (case findAllByFunc
+                        (\(tableColName, colName) -> case whereColName of
+                            (Nothing, name) -> colName == name
+                            (tableName, name) -> tableColName == tableName && colName == name)
+                        tableNamedCols of
+                        [] -> Left $ "Column " ++ show whereColName ++ " does not exist"
+                        x:[] -> guardCheck (not $ isStringColumn x) $ "Column " ++ show whereColName ++ "is not of string type"
+                        x:xs -> Left $ "Column " ++ show whereColName ++ " matched in more than one table"))
+                allWhereColNames (Right ())
+            where
+                allWhereColNames = [operand | (_, ColumnName operand, _) <- whereOps]
+                    ++ [operand | (ColumnName operand, _, _) <- whereOps]
+        filterByWhere :: [[((Maybe String, String), Value)]]
+            -> [(WhereOperand, WhereOperand, WhereOperator)]
+            -> [[((Maybe String, String), Value)]]
+        filterByWhere namedRows ops = [namedRow | namedRow <- namedRows, executeWhere namedRow ops]
+            where
+                executeWhere :: [((Maybe String, String), Value)]
+                    -> [(WhereOperand, WhereOperand, WhereOperator)]
+                    -> Bool
+                executeWhere namedRow [] = True
+                executeWhere namedRow ops = forEach (\(lVal, rVal, operator) acc -> if acc
+                    then acc
+                    else (operator (getValue lVal) (getValue rVal)))
+                    ops False
+                    where
+                        getValue :: WhereOperand -> String
+                        getValue x = case x of
+                            Constant str -> str
+                            ColumnName (maybeOpTableName, opColName) -> case findAllByFunc
+                                (\(maybeTableName, colName) -> case maybeOpTableName of
+                                    Nothing -> opColName == colName
+                                    Just _ -> maybeOpTableName == maybeTableName && opColName == colName)
+                                namedRow of
+                                (StringValue value):[] -> value
+                                _ -> ""
 executeStatement (ShowTableStatement tableToShow') database' = do
     case tableToShow' of
         Nothing -> Right $ DataFrame
@@ -874,6 +925,15 @@ listCartesianProduct (x:xs) = listCartesianProduct' xs x
         listCartesianProduct' [] acc = acc
         listCartesianProduct' (y:ys) acc = listCartesianProduct' ys (cartesianProduct acc y)
 
+decomposeListList :: [[a]] -> [a]
+decomposeListList xss = [x | xs <- xss, x <- xs]
+
+findAllByFunc :: (a -> Bool) -> [(a, b)] -> [b]
+findAllByFunc needleFunc haystack = [value | (key, value) <- haystack, needleFunc key]
+
+forEach :: (a -> b -> b) -> [a] -> b -> b
+forEach func (x:xs) acc = forEach func xs (func x acc)
+forEach _ [] acc = acc
 
 
 

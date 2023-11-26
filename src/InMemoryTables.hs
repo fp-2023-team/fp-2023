@@ -92,6 +92,28 @@ tableWithDuplicateColumns = (
         ]
     )
 
+cartesianProductTestOne :: (TableName, DataFrame)
+cartesianProductTestOne = (
+    "cartProdTestOne",
+    DataFrame
+        [Column "a" StringType, Column "b" StringType]
+        [
+            [StringValue "a", StringValue "a"],
+            [StringValue "a", StringValue "b"]
+        ]
+    )
+
+cartesianProductTestTwo :: (TableName, DataFrame)
+cartesianProductTestTwo = (
+    "cartProdTestTwo",
+    DataFrame
+        [Column "a" StringType, Column "b" StringType]
+        [
+            [StringValue "x", StringValue "x"],
+            [StringValue "x", StringValue "y"]
+        ]
+    )
+
 tableNoRows :: (TableName, DataFrame)
 tableNoRows = (
     "noRows",
@@ -103,4 +125,4 @@ tableNoRows = (
 database :: [(TableName, DataFrame)]
 database = [tableEmployees, tableInvalid1, tableInvalid2,
         tableLongStrings, tableWithNulls, tableWithDuplicateColumns,
-        tableNoRows]
+        tableNoRows, cartesianProductTestOne, cartesianProductTestTwo]
