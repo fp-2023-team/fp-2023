@@ -2,13 +2,3 @@ resolver: lts-21.7
 system-ghc: true
 packages:
 - .
-extra-deps:
-- aeson-2.2.1.0
-- integer-conversion-0.1.0.1
-- text-iso8601-0.1
-- th-abstraction-0.5.0.0
-- bytestring-0.11.5.3
-- binary-0.8.9.1
-- text-2.0.2
-- parsec-3.1.17.0
-- haskeline-0.8.2.1
