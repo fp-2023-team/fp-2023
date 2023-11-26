@@ -102,18 +102,18 @@ runExecuteIO (Free step) = do
 --       ]
 --     pure $ next database
 
-runExecuteLocal :: Lib3.Execution r -> r
-runExecuteLocal (Pure r) = return r
-runExecuteLocal (Free step) = do
-    next <- runStep step
-    runExecuteLocal next
-    where
-        -- probably you will want to extend the interpreter
-        runStep :: Lib3.ExecutionAlgebra a -> a
-        runStep (Lib3.GetTime next) = getCurrentTime >>= return . next
-        runStep (Lib3.SaveTable name content next) = return . next
-        runStep (Lib3.LoadTable name next) = Lib3.serialize $ InMemoryTables.database !! 0 >>= return . next
-        runStep (Lib3.SerializeTable dataframe next) = pure (Lib3.serialize dataframe) >>= return . next
-        runStep (Lib3.DeserializeTable tableContent next) = pure (Lib3.deserialize tableContent) >>= return . next
-        runStep (Lib3.GetParsedStatement statement next) = pure (Lib2.parseStatement statement) >>= return . next
-        runStep (Lib3.GetExecutionResult statement database next) = pure (Lib2.executeStatement statement database) >>= return . next
+-- runExecuteLocal :: Lib3.Execution r -> r
+-- runExecuteLocal (Pure r) = return r
+-- runExecuteLocal (Free step) = do
+--     next <- runStep step
+--     runExecuteLocal next
+--     where
+--         -- probably you will want to extend the interpreter
+--         runStep :: Lib3.ExecutionAlgebra a -> IO a
+--         runStep (Lib3.GetTime next) = getCurrentTime >>= return . next
+--         runStep (Lib3.SaveTable name content next) = return . next
+--         runStep (Lib3.LoadTable name next) = Lib3.serialize $ InMemoryTables.database !! 0 >>= return . next
+--         runStep (Lib3.SerializeTable dataframe next) = pure (Lib3.serialize dataframe) >>= return . next
+--         runStep (Lib3.DeserializeTable tableContent next) = pure (Lib3.deserialize tableContent) >>= return . next
+--         runStep (Lib3.GetParsedStatement statement next) = pure (Lib2.parseStatement statement) >>= return . next
+--         runStep (Lib3.GetExecutionResult statement database next) = pure (Lib2.executeStatement statement database) >>= return . next
