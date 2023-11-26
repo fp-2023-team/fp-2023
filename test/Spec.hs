@@ -9,7 +9,7 @@ import Lib3
 import DataFrame
 import Test.Hspec
 import Data.Maybe
-import Test.Hspec (shouldBe)
+import Test.Hspec (shouldBe, describe)
 import Data.Either (Either(Right))
 import DataFrame (DataFrame(DataFrame), ColumnType (BoolType, IntegerType), Value (IntegerValue))
 import qualified Lib2
@@ -573,6 +573,76 @@ main = hspec $ do
       Lib2.parseStatement "DELETE FROM WHERE name = 'Employee Name';"
       `shouldSatisfy`
       isLeft
+  describe "Lib3.executeSql" $ do
+    it "executes select with columns from multiple tables" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs;")
+      df `shouldBe` Right (DataFrame [Column "employees.name" StringType,Column "jobs.title" StringType] [[StringValue "Vi",StringValue "Assistant"],[StringValue "Vi",StringValue "Lecturer"],[StringValue "Ed",StringValue "Assistant"],[StringValue "Ed",StringValue "Lecturer"]])
+    it "executes select with columns from multiple tables without specifying table in select" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT name, title FROM employees, jobs;")
+      df `shouldBe` Right  (DataFrame [Column "name" StringType,Column "title" StringType] [[StringValue "Vi",StringValue "Assistant"],[StringValue "Vi",StringValue "Lecturer"],[StringValue "Ed",StringValue "Assistant"],[StringValue "Ed",StringValue "Lecturer"]])
+    it "executes select with columns from multiple tables without some specifying table in select" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT name, jobs.title FROM employees, jobs;")
+      df `shouldBe` Right  (DataFrame [Column "name" StringType ,Column "jobs.title" StringType] [[StringValue "Vi",StringValue "Assistant"],[StringValue "Vi",StringValue "Lecturer"],[StringValue "Ed",StringValue "Assistant"],[StringValue "Ed",StringValue "Lecturer"]])
+    it "executes select with columns from multiple tables inside functions" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT MAX(employees.id), SUM(jobs.id) FROM employees, jobs;")
+      df `shouldBe` Right (DataFrame [Column "max" IntegerType, Column "sum" IntegerType] [[IntegerValue 2, IntegerValue 17]])
+    it "executes select with where clause" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.id = jobs.employeeId;")
+      df `shouldBe` Right (DataFrame [Column "name" StringType,Column "title" StringType] [[StringValue "Vi",StringValue "Lecturer"], [StringValue "Ed",StringValue "Assistant"]])
+    it "executes select with where OR clause" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.id = jobs.employeeId OR employees.name = jobs.title;")
+      df `shouldBe` Right (DataFrame [Column "name" StringType,Column "title" StringType] [[StringValue "Vi",StringValue "Lecturer"], [StringValue "Ed",StringValue "Assistant"]])
+    it "executes select with where clause and no table names" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs WHERE id = employeeId;")
+      df `shouldBe` Right (DataFrame [Column "name" StringType,Column "title" StringType] [[StringValue "Vi",StringValue "Lecturer"], [StringValue "Ed",StringValue "Assistant"]])
+    it "executes select with NOW() function and other mixed columns" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT NOW(), employees.name, jobs.title FROM employees, jobs;")
+      df `shouldBe` Right (DataFrame [Column "now" StringType, Column "employees.name" StringType, Column "jobs.title" StringType] [[StringValue "1984 something something", StringValue "Vi",StringValue "Assistant"],[StringValue "1984 something something", StringValue "Vi",StringValue "Lecturer"],[StringValue "1984 something something", StringValue "Ed",StringValue "Assistant"],[StringValue "1984 something something", StringValue "Ed",StringValue "Lecturer"]])
+
+
+    it "executes update with string constant in where" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "UPDATE employees SET id = 42, name = 'New Vi' WHERE name = 'Vi';")
+      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 42,StringValue "New Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"]])
+    it "executes update with column name in where" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "UPDATE employees SET id = 42, name = 'New Vi' WHERE name = surname;")
+      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 1,StringValue "Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"]])
+    it "executes update without where" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "UPDATE employees SET id = 42, name = 'New Vi';")
+      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 42,StringValue "New Vi",StringValue "Po"],[IntegerValue 42,StringValue "New Vi",StringValue "Dl"]])
+
+
+    it "executes insert with column names provided" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "INSERT INTO employees (surname, id, name) VALUES ('Inserted Test Surname', 42, 'Inserted Test Name');")
+      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 1,StringValue "Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"],[IntegerValue 42,StringValue "Inserted Test Name",StringValue "Inserted Test Surname"]])
+    it "executes insert without column names provided" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "INSERT INTO employees VALUES (42, 'Inserted Test Name', 'Inserted Test Surname');")
+      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 1,StringValue "Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"],[IntegerValue 42,StringValue "Inserted Test Name",StringValue "Inserted Test Surname"]])
+    it "executes delete with string constant in where" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "DELETE FROM employees WHERE name = 'Vi';")
+      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 2,StringValue "Ed",StringValue "Dl"]])
+    it "executes delete with column name in where" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "DELETE FROM employees WHERE name = surname;")
+      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 1,StringValue "Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"]])
+    it "executes delete without where" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "DELETE FROM employees;")
+      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [])
+
 
 type MemoryDatabase = IORef [(String, String)]
 
@@ -587,7 +657,7 @@ runExecuteIO memoryDB (Free step) = do
     runExecuteIO memoryDB next
     where
         runStep :: Lib3.ExecutionAlgebra a -> IO a
-        runStep (Lib3.GetTime next) = return (UTCTime {utctDay = fromOrdinalDate 2023 333, utctDayTime = secondsToDiffTime 0})  >>= return . next
+        runStep (Lib3.GetTime next) = return (UTCTime {utctDay = fromOrdinalDate 1984 333, utctDayTime = secondsToDiffTime 0})  >>= return . next
         runStep (Lib3.SaveTable name content next) = modifyIORef' memoryDB (modifyDatabase (name, content)) >>= return . next
         runStep (Lib3.LoadTable name next) = do
           table <- fmap (lookup name) (readIORef memoryDB)
