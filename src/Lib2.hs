@@ -569,9 +569,21 @@ executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' 
     let namedHell = map (createNamedRows) usedTables
     let cartesianHell = listCartesianProduct namedHell
     let filteredCartesianHell = filterByWhere cartesianHell whereArgs'
-    Right $ DataFrame
-        (decomposeListList [ifElse (let x:xs = usedTables in null xs) cols [Column (tableName ++ "." ++ colName) colType | (Column colName colType) <- cols] | (tableName, DataFrame cols _) <- usedTables])
-        (map (map (snd)) filteredCartesianHell)
+    case selectArgs' of
+        Right (Nothing, "*"):[] -> Right $ DataFrame
+            (case usedTables of
+                (_, DataFrame cols _):[] -> cols
+                _ -> [Column (tableName ++ "." ++ colName) colType
+                    | (tableName, DataFrame cols _) <- usedTables, Column colName colType <- cols])
+            (map (map snd) filteredCartesianHell)
+        Right (Just _, "*"):_ -> Left $ "Wildcard selector must be used without table name in 'select'"
+        Right (_, "*"):xs -> Left $ "Wildcard selector must be used by itself in 'select'"
+        _ -> do
+            selectedColumnValues <- applySelectArgs
+                (zip [(tableName, colName) | (tableName, DataFrame cols _) <- usedTables, Column colName _ <- cols]
+                    (transpose $ map (map snd) filteredCartesianHell))
+                selectArgs'
+            Left $ show (map fst selectedColumnValues) ++ show (transpose $ map snd selectedColumnValues)
     --_ <- Left $ show filteredCartesianHell
     -- _ <- if nullOrAny (null) (fmap findTableByName tableNames') then
    --         Left "Couldn't find at least one table in the database"
@@ -640,6 +652,41 @@ executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' 
                                 namedRow of
                                 (StringValue value):[] -> value
                                 _ -> ""
+        applySelectArgs :: [((TableName, String), [Value])]
+            -> [Either ([(Maybe String, String)], Function) (Maybe String, String)]
+            -> Either ErrorMessage [((TableName, String), [Value])]
+        applySelectArgs columnsWithValues selects = case [val | (Right val) <- selects] of
+                [] -> Right $ columnsWithValues
+                selectColumnNames -> forEach
+                    (\selectTableColName acc -> case acc of
+                        Left _ -> acc
+                        Right trueAcc -> case filterAllBy
+                            (\(tableName, colName) -> case selectTableColName of
+                                (Nothing, selectColName) -> selectColName == colName
+                                (Just selectTableName, selectColName) -> selectTableName == tableName && selectColName == colName)
+                            columnsWithValues of
+                            [] -> Left $ "Could not find column " ++ show selectTableColName ++ "in 'select'"
+                            match:[] -> Right $ match:trueAcc
+                            match:matches -> Left $ "Matched column " ++ show selectColumnNames ++ "more than once in 'select'")
+                    (reverse selectColumnNames)
+                    (Right [])
+            --columnSelectedTable <- applyColumnSelection table [name | Right name <- selects]
+            --where
+            --    applyColumnSelection :: DataFrame
+            --        -> [(Maybe String, String)]
+            --        -> Either ErrorMessage DataFrame
+            --    applyColumnSelection (DataFrame cols rows) colSelections = do
+            --        let columnsWithValues = zip cols (transpose rows)
+        --createTableFromNamedRows :: [[((Maybe String, String), Value)]]
+        --    -> [(TableName, DataFrame)]
+        --    -> DataFrame
+        --createTableFromNamedRows namedRows ((tableName, DataFrame cols _):[]) = DataFrame
+        --    [column
+        --        | column@(Column colName _) <- cols,
+        --            let namedRow:_ namedRowsnot $ null (lookup (Just tableName, colName) namedRow)]
+        --    (map (map (snd)) namedRows)
+        --    where
+        --        (namedRow:_) = namedRows
 executeStatement (ShowTableStatement tableToShow') database' = do
     case tableToShow' of
         Nothing -> Right $ DataFrame
@@ -930,6 +977,9 @@ decomposeListList xss = [x | xs <- xss, x <- xs]
 
 findAllByFunc :: (a -> Bool) -> [(a, b)] -> [b]
 findAllByFunc needleFunc haystack = [value | (key, value) <- haystack, needleFunc key]
+
+filterAllBy :: (a -> Bool) -> [(a, b)] -> [(a, b)]
+filterAllBy needleFunc haystack = [(key, value) | (key, value) <- haystack, needleFunc key]
 
 forEach :: (a -> b -> b) -> [a] -> b -> b
 forEach func (x:xs) acc = forEach func xs (func x acc)
