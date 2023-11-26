@@ -6,21 +6,26 @@
 module Lib3
     (
         executeSql,
+        convertDF,
+        serialize,
+        deserialize,
+        unconvertDF,
         Execution,
         ExecutionAlgebra(..),
         JSONserializable(..)
     )
 where
 
-import Control.Monad.Free (Free (..), liftF)
+import Control.Monad.Free (Free (..), liftF, retract)
 import DataFrame
 import InMemoryTables ( database )
-import Data.Time ( UTCTime )
+import Data.Time ( UTCTime, getCurrentTime )
 import GHC.Generics
 import Data.Aeson
 import Data.ByteString.Lazy.Char8 (pack, unpack)
 import Data.Char
-import Lib2
+import Lib2 (executeStatement, ParsedStatement (SelectStatement, ShowTableStatement, InsertIntoStatement, DeleteStatement, UpdateStatement))
+import Data.Either (Either(Right))
 
 type TableName = String
 type TableContent = String
@@ -30,6 +35,11 @@ data ExecutionAlgebra next
     = GetTime (UTCTime -> next)
     | SaveTable TableName TableContent (() -> next)
     | LoadTable TableName (TableContent -> next)
+    | LoadDatabase ([(TableName, DataFrame)] -> next)
+    | SerializeTable DataFrame (TableContent -> next)
+    | DeserializeTable TableContent (Maybe DataFrame -> next)
+    | GetParsedStatement String (Either ErrorMessage ParsedStatement -> next)
+    | GetExecutionResult ParsedStatement [(TableName, DataFrame)] (Either ErrorMessage DataFrame -> next)
     -- feel free to add more constructors here
     deriving Functor
 
@@ -44,13 +54,72 @@ saveTable name content = liftF $ SaveTable name content id
 loadTable :: TableName -> Execution TableContent
 loadTable name = liftF $ LoadTable name id
 
+loadDatabase :: Execution [(TableName, DataFrame)]
+loadDatabase = liftF $ LoadDatabase id
+
+serializeTable :: DataFrame -> Execution TableContent
+serializeTable frame = liftF $ SerializeTable frame id
+
+deserializeTable :: TableContent -> Execution (Maybe DataFrame)
+deserializeTable content = liftF $ DeserializeTable content id
+
+getParsedStatement :: String -> Execution (Either ErrorMessage ParsedStatement)
+getParsedStatement statement = liftF $ GetParsedStatement statement id
+
+getExecutionResult :: ParsedStatement -> [(TableName, DataFrame)] -> Execution (Either ErrorMessage DataFrame)
+getExecutionResult statement database = liftF $ GetExecutionResult statement database id
+
 -- We're using a temporary from memory database
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
-    case parseStatement sql of
-        Left err -> return $ Left err
-        Right parsed -> return $ executeStatement parsed InMemoryTables.database
+  parsed <- getParsedStatement sql
+  database <- getRelevantTables ["duplicates", "employees", "flags", "invalid1", "invalid2", "long_strings"]
+  executionResult <- case(parsed) of
+    Left e -> return $ Left e 
+    Right parsedStmt -> case(database) of
+      Left e -> return $ Left e
+      Right exist -> getExecutionResult parsedStmt exist
+  case (executionResult) of
+    Left e -> return $ Left e
+    Right result -> case (parsed) of
+      Right (SelectStatement _ _ _) -> return $ Right result
+      Right (ShowTableStatement _) -> return $ Right result
+      Right (InsertIntoStatement _ _ _) -> do
+        persistTable "employees" result
+        return $ Right result
+      Right (UpdateStatement _ _ _) -> do
+        persistTable "employees" result
+        return $ Right result
+      Right (DeleteStatement _ _) -> do
+        persistTable "employees" result
+        return $ Right result
 
+getRelevantTables :: [TableName] -> Execution (Either ErrorMessage [(TableName, DataFrame)])
+getRelevantTables [] = do
+  Pure $ Right []
+getRelevantTables (x:xs) = do
+  table <- getTable x
+  case table of
+    Left e -> return $ Left e
+    Right goodTable -> do
+      otherTables <- getRelevantTables xs
+      case otherTables of
+        Left e -> return $ Left e
+        Right goodTables -> Pure $ Right (goodTable : goodTables)
+
+persistTable :: TableName -> DataFrame -> Execution ()
+persistTable name duom = do
+  serial <- serializeTable duom
+  saveTable name serial
+
+getTable :: TableName -> Execution (Either ErrorMessage (TableName, DataFrame))
+getTable name = do
+  table <- loadTable name
+  deserializedTable1 <- deserializeTable (table) 
+  case (deserializedTable1) of
+    Nothing -> return $ Left $ "Failed to deserialize table \"" ++ name ++ "\""
+    Just a -> Pure $ Right (name, a)
+  
 class JSONserializable a where
   serialize :: a -> String
   deserialize :: String -> Maybe a

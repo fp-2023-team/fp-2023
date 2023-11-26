@@ -664,6 +664,17 @@ runExecuteIO memoryDB (Free step) = do
           case table of
             Just a -> return a >>= return . next
             Nothing -> return "" >>= return . next
+        runStep (Lib3.SerializeTable dataframe next) = pure (Lib3.serialize dataframe) >>= return . next
+        runStep (Lib3.DeserializeTable tableContent next) = pure (Lib3.deserialize tableContent) >>= return . next
+        runStep (Lib3.GetParsedStatement statement next) = pure (Lib2.parseStatement statement) >>= return . next
+        runStep (Lib3.GetExecutionResult statement database next) = pure (Lib2.executeStatement statement database) >>= return . next
+
+getTableFromDB :: MemoryDatabase -> String -> IO (Maybe DataFrame)
+getTableFromDB ref name = do 
+  a <- readIORef ref
+  case lookup name a of
+    Just b -> return (deserialize b :: Maybe DataFrame)
+    Nothing -> return Nothing
 
 modifyDatabase :: (String, String) -> [(String, String)] -> [(String, String)]
 modifyDatabase a [] = [a]

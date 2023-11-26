@@ -371,6 +371,7 @@ parseValue a = do
       word | parseCompare word "null" -> Right (NullValue, sym, remainder)
            | parseCompare word "true" -> Right (BoolValue True, sym, remainder)
            | isNumber word -> Right (IntegerValue $ getNumber word, sym, remainder)
+           | otherwise -> Left $ "Unexpected value: " ++ word
   return (manipulatedWord, newsym, newrem)
 
 parseDelete :: String -> Either ErrorMessage ParsedStatement
@@ -427,11 +428,6 @@ parseConstantList a = do
       parseRes <- parseConstantList newrem
       Right $ manipulatedWord : parseRes
   return result
-  -- (x, ',', xs) -> do
-  --   (parseRes, rem) <- parseConstantList xs
-  --   return (x : parseRes, rem)
-  -- (x, ')', xs) -> Right ([x], xs)
-  -- (x, sym, _) -> Left $ "Unexpected " ++ [sym] ++ " after " ++ x
 
 isNumber :: String -> Bool
 isNumber [] = False
