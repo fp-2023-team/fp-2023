@@ -101,3 +101,5 @@ tests:
       - fp2023
       - hspec
       - raw-strings-qq
+      - free
+      - time
