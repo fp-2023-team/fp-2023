@@ -7,7 +7,8 @@ module Lib3
     (
         executeSql,
         Execution,
-        ExecutionAlgebra(..)
+        ExecutionAlgebra(..),
+        JSONserializable(..)
     )
 where
 

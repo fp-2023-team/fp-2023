@@ -130,8 +130,6 @@ main = hspec $ do
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                         [[IntegerValue 2]])
-{-
-  ---------------------------------------------------------------------------------------------------------------
   describe "Lib2.parseStatement Task 3" $ do
     it "parses a show tables statement" $ do
       Lib2.parseStatement "SHOW TABLES;" `shouldBe` (parseTest 0)
@@ -414,8 +412,6 @@ main = hspec $ do
         selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "title")],
         fromArgs = ["employees", "jobs"],
         whereArgs = [( ColumnName (Nothing, "name"), ColumnName (Nothing, "holder"),  whereEq)]})
-
--}
 
     it "parses update with string constant in where" $ do
       Lib2.parseStatement "UPDATE employees SET id = 5, name = 'New Name' WHERE name = 'Old Name';"
