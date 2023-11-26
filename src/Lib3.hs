@@ -23,8 +23,7 @@ import GHC.Generics
 import Data.Aeson
 import Data.ByteString.Lazy.Char8 (pack, unpack)
 import Data.Char
-import Lib2
-import Lib2 (executeStatement)
+import Lib2 (executeStatement, ParsedStatement (SelectStatement, ShowTableStatement, InsertIntoStatement, DeleteStatement, UpdateStatement))
 import Data.Either (Either(Right))
 
 type TableName = String
@@ -73,22 +72,46 @@ getExecutionResult statement database = liftF $ GetExecutionResult statement dat
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
   parsed <- getParsedStatement sql
-  table1 <- getTable "employees"
-  case(parsed) of
+  table1 <- getTable "duplicates"
+  table2 <- getTable "employees"
+  table3 <- getTable "flags"
+  table4 <- getTable "foo"
+  table5 <- getTable "invalid1"
+  table6 <- getTable "invalid2"
+  table7 <- getTable "long_strings"
+  executionResult <- case(parsed) of
     Left e -> return $ Left e 
-    --Right parsedStmt -> case(existingDeserialisedTable1) of
-    Right parsedStmt -> case(table1) of
+    Right parsedStmt -> case(table2) of
       Left e -> return $ Left e
-      Right exist -> getExecutionResult parsedStmt [("employees", exist)] --Pure $ Right exist
+      Right exist -> getExecutionResult parsedStmt [exist]
+  case (executionResult) of
+    Left e -> return $ Left e
+    Right result -> case (parsed) of
+      Right (SelectStatement _ _ _) -> return $ Right result
+      Right (ShowTableStatement _) -> return $ Right result
+      Right (InsertIntoStatement _ _ _) -> do
+        persistTable "employees" result
+        return $ Right result
+      Right (UpdateStatement _ _ _) -> do
+        persistTable "employees" result
+        return $ Right result
+      Right (DeleteStatement _ _) -> do
+        persistTable "employees" result
+        return $ Right result
 
-getTable :: TableName -> Execution (Either ErrorMessage DataFrame)
+persistTable :: TableName -> DataFrame -> Execution ()
+persistTable name duom = do
+  serial <- serializeTable duom
+  saveTable name serial
+
+getTable :: TableName -> Execution (Either ErrorMessage (TableName, DataFrame))
 getTable name = do
   table <- loadTable name
   deserializedTable1 <- deserializeTable (table) 
   --existingDeserialisedTable1 <- 
   case (deserializedTable1) of
     Nothing -> return $ Left "Failed to deserialize table \"Employees\""
-    Just a -> Pure $ Right a
+    Just a -> Pure $ Right (name, a)
   -- saveTable "test" sql
   -- deserializeTable "employees"
     -- case parseStatement sql of
