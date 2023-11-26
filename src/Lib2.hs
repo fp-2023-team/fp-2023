@@ -5,6 +5,7 @@ module Lib2
     executeStatement,
     ParsedStatement (..),
     WhereOperand (..),
+    Function(..),
     listCartesianProduct
   )
 where
@@ -48,7 +49,7 @@ data ParsedStatement = SelectStatement {
       tablename :: String,
       whereArgs :: [(WhereOperand, WhereOperand, WhereOperator)]
     }
-    --deriving (Eq) IDK what this does just temporary this
+
 
 data WhereOperand = Constant String | ColumnName (Maybe String, String) deriving Show
 
@@ -822,21 +823,7 @@ nullOrAny f x = null x || any f x
 -- uncombineColumnsFromValues :: [(a, [b])] -> ([a], [[b]])
 -- uncombineColumnsFromValues mapped = (fst $ unzip mapped, transpose $ snd $ unzip mapped)
 
--- instance Eq ([Value] -> Value) where
---   a == b = True
---   a /= b = False
 
--- instance Eq (String -> String -> Bool) where
---   a == b = True
---   a /= b = False
-
--- instance Eq WhereOperand where
---   Constant a == Constant b = a == b
---   ColumnName a == ColumnName b = a == b
---   Constant _ == ColumnName _ = False
---   ColumnName _ == Constant _ = False
---   a /= b = not (a == b)
---
 
 -- False - first, True - second
 ifElse :: Bool -> a -> a  -> a
@@ -886,3 +873,52 @@ listCartesianProduct (x:xs) = listCartesianProduct' xs x
         listCartesianProduct' :: [[[a]]] -> [[a]] -> [[a]]
         listCartesianProduct' [] acc = acc
         listCartesianProduct' (y:ys) acc = listCartesianProduct' ys (cartesianProduct acc y)
+
+
+
+
+
+
+
+------------ For testing ------------
+
+instance Eq ParsedStatement where
+  SelectStatement sa1 fa1 wa1 == SelectStatement sa2 fa2 wa2 =
+    sa1 == sa2 && fa1 == fa2 && wa1 == wa2
+  ShowTableStatement sa1 == ShowTableStatement sa2 =
+    sa1 == sa2
+  UpdateStatement tn1 av1 wa1 == UpdateStatement tn2 av2 wa2 =
+    tn1 == tn2 && av1 == av2 && wa1 == wa2
+  InsertIntoStatement tn1 vo1 v1 == InsertIntoStatement tn2 vo2 v2 =
+    tn1 == tn2 && vo1 == vo2 && v1 == v2
+  DeleteStatement tn1 wa1 == DeleteStatement tn2 wa2 =
+    tn1 == tn2 && wa1 == wa2
+  _ == _ = False
+
+instance Show Function where
+  show (Func0 _) = " NOW() "
+  show (Func1 _) = " MAX(something) or SUM(something) "
+
+instance Show WhereOperator where
+  show a = "(=, OR)"
+
+instance Show ParsedStatement where
+  show (SelectStatement sa fa wa) = "SelectStatement: " ++ show sa ++ " " ++ show fa ++ " " ++ show wa
+  show (ShowTableStatement sta) = "ShowTableStatement: " ++ show sta
+  show (UpdateStatement tn av wa) = "UpdateStatement: " ++ show tn ++ " " ++ show av ++ " " ++ show wa
+  show (InsertIntoStatement tn vo v) = "InsertIntoStatement: "  ++ show tn ++ " " ++ show vo ++ " " ++ show v
+  show (DeleteStatement tn wa) = "DeleteStatement: " ++ show tn ++ " " ++ show wa
+
+instance Eq Function where 
+  (Func0 _) == (Func0 _) = True
+  (Func1 _) == (Func1 _) = True
+  _ == _ = False
+
+instance Eq WhereOperator where -- WhereOperator
+  _ == _ = True
+
+instance Eq WhereOperand where
+  Constant a == Constant b = a == b
+  ColumnName a == ColumnName b = a == b
+  Constant _ == ColumnName _ = False
+  ColumnName _ == Constant _ = False

@@ -1,10 +1,18 @@
+{-# LANGUAGE QuasiQuotes #-}
+import Text.RawString.QQ
 import Data.Either
 import Data.Maybe ()
 import InMemoryTables qualified as D
 import Lib1
 import Lib2
+import Lib3
 import DataFrame
 import Test.Hspec
+import Data.Maybe
+import Test.Hspec (shouldBe)
+import Data.Either (Either(Right))
+import DataFrame (DataFrame(DataFrame), ColumnType (BoolType, IntegerType), Value (IntegerValue))
+
 
 main :: IO ()
 main = hspec $ do
@@ -37,6 +45,8 @@ main = hspec $ do
   describe "Lib1.renderDataFrameAsTable" $ do
     it "renders a table" $ do
       Lib1.renderDataFrameAsTable 100 (snd D.tableEmployees) `shouldSatisfy` not . null
+----------------------------------------------------------------------------------------------------------------------------------------------
+{-
   describe "Lib2.parseStatement" $ do
     it "parses a show tables statement" $ do
       Lib2.parseStatement "SHOW TABLES;" `shouldBe` (parseTest 0)
@@ -118,6 +128,242 @@ main = hspec $ do
         Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                         [[IntegerValue 2]])
 
+  ---------------------------------------------------------------------------------------------------------------
+  describe "Lib2.parseStatement Task 3" $ do
+    it "parses a show tables statement" $ do
+      Lib2.parseStatement "SHOW TABLES;" `shouldBe` (parseTest 0)
+  -}
+  describe "Lib3.deserialize" $ do
+    it "deserializes valid table" $ do
+      Lib3.deserialize [r|
+        [
+          [
+            ["id","IT"],
+            ["name","ST"],
+            ["surname","ST"],
+            ["isActive","BT"]
+          ],
+          [
+            [
+              {"contents":1,"tag":"IV"},
+              {"contents":"Vi","tag":"SV"},
+              {"contents":"Po","tag":"SV"},
+              {"contents":true,"tag":"BV"}
+            ],
+            [
+              {"contents":2,"tag":"IV"},
+              {"contents":"Ed","tag":"SV"},
+              {"contents":"Dl","tag":"SV"},
+              {"contents":false,"tag":"BV"}
+            ],
+            [
+              {"tag":"NV"},
+              {"tag":"NV"},
+              {"tag":"NV"},
+              {"tag":"NV"}
+            ]
+          ]
+        ]
+      |]
+      `shouldBe` Just (DataFrame
+        [Column "id" IntegerType, Column "name" StringType, Column "surname" StringType, Column "isActive" BoolType]
+        [
+          [IntegerValue 1, StringValue "Vi", StringValue "Po", BoolValue True],
+          [IntegerValue 2, StringValue "Ed", StringValue "Dl", BoolValue False],
+          [NullValue, NullValue, NullValue, NullValue]
+        ])
+        
+    it "deserializes empty table" $ do
+      Lib3.deserialize [r|
+        [
+          [
+            ["id","IT"],
+            ["name","ST"],
+            ["surname","ST"],
+            ["isActive","BT"]
+          ],
+          []
+        ]
+      |]
+      `shouldBe` Just (DataFrame
+        [Column "id" IntegerType, Column "name" StringType, Column "surname" StringType, Column "isActive" BoolType]
+        [])
+
+    it "parses minimal table" $ do
+      Lib3.deserialize [r|
+        [
+          [
+            ["id","IT"]
+          ],
+          [
+            [
+              {"contents":1,"tag":"IV"}
+            ]
+          ]
+        ]
+      |]
+      `shouldBe` Just (DataFrame 
+      [Column "id" IntegerType]
+      [
+        [IntegerValue 1]
+      ])
+
+    it "nothing if json is malformed" $ do
+      Lib3.deserialize [r|
+        [
+          
+            ["id","IT"]
+          ],
+          [
+            [
+              {"contents":1,"tag":"IV"}
+            ]
+          ]
+        ]
+      |]
+      `shouldBe` (Nothing :: Maybe DataFrame)
+
+    it "nothing if value doesn't match the type" $ do
+      Lib3.deserialize [r|
+        [
+          [
+            ["id","IT"]
+          ],
+          [
+            [
+              {"contents":"a string","tag":"IV"}
+            ]
+          ]
+        ]
+      |]
+      `shouldBe` (Nothing :: Maybe DataFrame)
+
+    it "nothing if missing required fields" $ do
+      Lib3.deserialize [r|
+        [
+          [
+            ["id","IT"]
+          ],
+          [
+            [
+              {"contents":"a string"}
+            ]
+          ]
+        ]
+      |]
+      `shouldBe` (Nothing :: Maybe DataFrame)
+    it "nothing if more fields than required" $ do
+      Lib3.deserialize [r|
+        [
+          [
+            ["id","IT"]
+          ],
+          [
+            [
+              {"contents":"a string"},
+              {"contents":"a string"}
+            ]
+          ]
+        ]
+      |]
+      `shouldBe` (Nothing :: Maybe DataFrame)
+  describe "Lib3.serialize" $ do
+    it "serializes valid table" $ do
+      Lib3.serialize (DataFrame
+        [Column "id" IntegerType, Column "name" StringType, Column "surname" StringType, Column "isActive" BoolType]
+        [
+          [IntegerValue 1, StringValue "Vi", StringValue "Po", BoolValue True],
+          [IntegerValue 2, StringValue "Ed", StringValue "Dl", BoolValue False],
+          [NullValue, NullValue, NullValue, NullValue]
+        ]) `shouldBe` 
+       filter (\x -> x /= ' ' && x /= '\n') [r|
+        [
+          [
+            ["id","IT"],
+            ["name","ST"],
+            ["surname","ST"],
+            ["isActive","BT"]
+          ],
+          [
+            [
+              {"contents":1,"tag":"IV"},
+              {"contents":"Vi","tag":"SV"},
+              {"contents":"Po","tag":"SV"},
+              {"contents":true,"tag":"BV"}
+            ],
+            [
+              {"contents":2,"tag":"IV"},
+              {"contents":"Ed","tag":"SV"},
+              {"contents":"Dl","tag":"SV"},
+              {"contents":false,"tag":"BV"}
+            ],
+            [
+              {"tag":"NV"},
+              {"tag":"NV"},
+              {"tag":"NV"},
+              {"tag":"NV"}
+            ]
+          ]
+        ]
+      |]
+      
+        
+    it "deserializes empty table" $ do
+      Lib3.serialize (DataFrame
+        [Column "id" IntegerType, Column "name" StringType, Column "surname" StringType, Column "isActive" BoolType]
+        [])
+      `shouldBe`
+      filter (\x -> x /= ' ' && x /= '\n') [r|
+        [
+          [
+            ["id","IT"],
+            ["name","ST"],
+            ["surname","ST"],
+            ["isActive","BT"]
+          ],
+          []
+        ]
+      |]
+
+    it "parses minimal table" $ do
+      Lib3.serialize (DataFrame 
+        [Column "id" IntegerType]
+        [
+          [IntegerValue 1]
+        ])
+      `shouldBe`
+      filter (\x -> x /= ' ' && x /= '\n') [r|
+        [
+          [
+            ["id","IT"]
+          ],
+          [
+            [
+              {"contents":1,"tag":"IV"}
+            ]
+          ]
+        ]
+      |]
+  describe "Lib2.parseStatement updated (For task 3)" $ do
+    it "selects columns from multiple tables" $ do
+      Lib2.parseStatement "SELECT employees.name, jobs.title, departments.location FROM employees, jobs, departments;" 
+      `shouldBe` 
+      Right (SelectStatement {
+        selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "title"), Right (Just "departments", "location")],
+        fromArgs = ["employees", "jobs", "departments"],
+        whereArgs = []})
+    it "selects using now()" $ do
+      Lib2.parseStatement "SELECT NOW();" 
+      `shouldBe` 
+      Right (SelectStatement {
+        selectArgs = [Left ([], Func0 "")],
+        fromArgs = [],
+        whereArgs = []})
+      
+
+
+
+{-
 testRes1 :: DataFrame
 testRes1 = DataFrame
   [Column "table_name" StringType]
@@ -163,8 +409,7 @@ testRes5 = DataFrame
         [StringValue "b", StringValue "a"]
     ]
 
-instance Show ParsedStatement where
-  show _ = "parsed statement"
+
 
 type ErrorMessage = String
 
@@ -184,3 +429,5 @@ dummy1 _ = NullValue
 
 dummy2 :: String -> String -> Bool
 dummy2 a b = True
+-}
+
