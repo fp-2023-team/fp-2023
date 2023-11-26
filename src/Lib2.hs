@@ -6,6 +6,9 @@ module Lib2
     ParsedStatement (..),
     WhereOperand (..),
     Function(..),
+    now',
+    sum',
+    max',
     listCartesianProduct
   )
 where
@@ -925,6 +928,7 @@ listCartesianProduct (x:xs) = listCartesianProduct' xs x
         listCartesianProduct' [] acc = acc
         listCartesianProduct' (y:ys) acc = listCartesianProduct' ys (cartesianProduct acc y)
 
+
 decomposeListList :: [[a]] -> [a]
 decomposeListList xss = [x | xs <- xss, x <- xs]
 
@@ -934,8 +938,6 @@ findAllByFunc needleFunc haystack = [value | (key, value) <- haystack, needleFun
 forEach :: (a -> b -> b) -> [a] -> b -> b
 forEach func (x:xs) acc = forEach func xs (func x acc)
 forEach _ [] acc = acc
-
-
 
 
 
@@ -960,7 +962,7 @@ instance Show Function where
   show (Func1 _) = " MAX(something) or SUM(something) "
 
 instance Show WhereOperator where
-  show a = "(=, OR)"
+  show _ = "(=, OR)"
 
 instance Show ParsedStatement where
   show (SelectStatement sa fa wa) = "SelectStatement: " ++ show sa ++ " " ++ show fa ++ " " ++ show wa
@@ -982,3 +984,7 @@ instance Eq WhereOperand where
   ColumnName a == ColumnName b = a == b
   Constant _ == ColumnName _ = False
   ColumnName _ == Constant _ = False
+
+now' = now
+max' = Lib2.max
+sum' = Lib2.sum

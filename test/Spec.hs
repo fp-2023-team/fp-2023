@@ -12,6 +12,10 @@ import Data.Maybe
 import Test.Hspec (shouldBe)
 import Data.Either (Either(Right))
 import DataFrame (DataFrame(DataFrame), ColumnType (BoolType, IntegerType), Value (IntegerValue))
+import qualified Lib2
+import qualified Lib2
+import qualified Data.Ord as Lib2
+import Text.Read (Lexeme(String))
 
 
 main :: IO ()
@@ -189,7 +193,7 @@ main = hspec $ do
         [Column "id" IntegerType, Column "name" StringType, Column "surname" StringType, Column "isActive" BoolType]
         [])
 
-    it "parses minimal table" $ do
+    it "deserializes minimal table" $ do
       Lib3.deserialize [r|
         [
           [
@@ -308,7 +312,7 @@ main = hspec $ do
       |]
       
         
-    it "deserializes empty table" $ do
+    it "serializes empty table" $ do
       Lib3.serialize (DataFrame
         [Column "id" IntegerType, Column "name" StringType, Column "surname" StringType, Column "isActive" BoolType]
         [])
@@ -325,7 +329,7 @@ main = hspec $ do
         ]
       |]
 
-    it "parses minimal table" $ do
+    it "serializes minimal table" $ do
       Lib3.serialize (DataFrame 
         [Column "id" IntegerType]
         [
@@ -345,22 +349,237 @@ main = hspec $ do
         ]
       |]
   describe "Lib2.parseStatement updated (For task 3)" $ do
-    it "selects columns from multiple tables" $ do
+    it "parses select with columns from multiple tables" $ do
       Lib2.parseStatement "SELECT employees.name, jobs.title, departments.location FROM employees, jobs, departments;" 
       `shouldBe` 
       Right (SelectStatement {
         selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "title"), Right (Just "departments", "location")],
         fromArgs = ["employees", "jobs", "departments"],
         whereArgs = []})
-    it "selects using now()" $ do
+    it "parses select with columns from multiple tables without specifying table in select" $ do
+      Lib2.parseStatement "SELECT name, title, location FROM employees, jobs, departments;" 
+      `shouldBe` 
+      Right (SelectStatement {
+        selectArgs = [Right (Nothing, "name"), Right (Nothing, "title"), Right (Nothing, "location")],
+        fromArgs = ["employees", "jobs", "departments"],
+        whereArgs = []})
+    it "parses select with columns from multiple tables without some specifying table in select" $ do
+      Lib2.parseStatement "SELECT name, jobs.title, location FROM employees, jobs, departments;" 
+      `shouldBe` 
+      Right (SelectStatement {
+        selectArgs = [Right (Nothing, "name"), Right (Just "jobs", "title"), Right (Nothing, "location")],
+        fromArgs = ["employees", "jobs", "departments"],
+        whereArgs = []})
+    it "parses select with columns from multiple tables inside a function" $ do
+      Lib2.parseStatement "SELECT MAX(employees.age), SUM(jobs.id) FROM employees, jobs;" 
+      `shouldBe` 
+      Right (SelectStatement {
+        selectArgs = [Left ([(Just "employees", "age")], Func1 Lib2.max'), Left ([(Just "jobs", "id")], Func1 Lib2.sum')],
+        fromArgs = ["employees", "jobs"],
+        whereArgs = []})
+    it "parses select with NOW() function" $ do
       Lib2.parseStatement "SELECT NOW();" 
       `shouldBe` 
       Right (SelectStatement {
-        selectArgs = [Left ([], Func0 "")],
+        selectArgs = [Left ([], Func0 Lib2.now')],
         fromArgs = [],
         whereArgs = []})
-      
+    it "parses select with NOW() function and other mixed columns" $ do
+      Lib2.parseStatement "SELECT NOW(), employees.name, jobs.title FROM employees, jobs;"
+      `shouldBe`
+      Right (SelectStatement {
+        selectArgs = [Left ([], Func0 Lib2.now'), Right (Just "employees", "name"), Right(Just "jobs", "title")],
+        fromArgs = ["employees", "jobs"],
+        whereArgs = []})
+    it "parses select with where clause" $ do
+      Lib2.parseStatement "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.name = jobs.holder;"
+      `shouldBe`
+      Right (SelectStatement {
+        selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "title")],
+        fromArgs = ["employees", "jobs"],
+        whereArgs = [( ColumnName (Just "employees", "name"), ColumnName (Just "jobs", "holder"),  whereEq)]})
+    it "parses select with where OR clause" $ do
+      Lib2.parseStatement "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.name = jobs.holder OR employees.jobId = jobs.id;"
+      `shouldBe`
+      Right (SelectStatement {
+        selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "title")],
+        fromArgs = ["employees", "jobs"],
+        whereArgs = [
+          (ColumnName (Just "employees", "name"), ColumnName (Just "jobs", "holder"), whereEq), 
+          (ColumnName (Just "employees", "jobId"), ColumnName (Just "jobs", "id"),  whereEq)
+        ]})
+    it "parses select with where clause and no table names" $ do
+      Lib2.parseStatement "SELECT employees.name, jobs.title FROM employees, jobs WHERE name = holder;"
+      `shouldBe`
+      Right (SelectStatement {
+        selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "title")],
+        fromArgs = ["employees", "jobs"],
+        whereArgs = [( ColumnName (Nothing, "name"), ColumnName (Nothing, "holder"),  whereEq)]})
 
+
+    it "parses update with string constant in where" $ do
+      Lib2.parseStatement "UPDATE employees SET id = 5, name = 'New Name' WHERE name = 'Old Name';"
+      `shouldBe`
+      Right (UpdateStatement {
+        tablename = "employees",
+        assignedValues = [("id", IntegerValue 5), ("name", StringValue "New Name")],
+        whereArgs = [( ColumnName (Nothing, "name"), Constant "Old Name",  whereEq)]})
+    it "parses update with number constant in where" $ do
+      Lib2.parseStatement "UPDATE employees SET id = 5, name = 'New Name' WHERE id = 1;"
+      `shouldBe`
+      Right (UpdateStatement {
+        tablename = "employees",
+        assignedValues = [("id", IntegerValue 5), ("name", StringValue "New Name")],
+        whereArgs = [( ColumnName (Nothing, "id"), Constant "1",  whereEq)]})
+    it "parses update with column name in where" $ do
+      Lib2.parseStatement "UPDATE employees SET id = 5, name = 'New Name' WHERE id = otherId;"
+      `shouldBe`
+      Right (UpdateStatement {
+        tablename = "employees",
+        assignedValues = [("id", IntegerValue 5), ("name", StringValue "New Name")],
+        whereArgs = [( ColumnName (Nothing, "id"), ColumnName (Nothing, "otherId"),  whereEq)]})
+    it "parses update keyword case insensitive" $ do
+      Lib2.parseStatement "uPdAtE employees sET id = 5, name = 'New Name' WhErE id = otherId;"
+      `shouldBe`
+      Right (UpdateStatement {
+        tablename = "employees",
+        assignedValues = [("id", IntegerValue 5), ("name", StringValue "New Name")],
+        whereArgs = [( ColumnName (Nothing, "id"), ColumnName (Nothing, "otherId"),  whereEq)]})
+    it "parses update with extra whitespace" $ do
+      Lib2.parseStatement "UPDATE            employees    SET    id=  5,    name  ='New Name'  WHERE   id=otherId;"
+      `shouldBe`
+      Right (UpdateStatement {
+        tablename = "employees",
+        assignedValues = [("id", IntegerValue 5), ("name", StringValue "New Name")],
+        whereArgs = [( ColumnName (Nothing, "id"), ColumnName (Nothing, "otherId"),  whereEq)]})
+    it "parses update without where" $ do
+      Lib2.parseStatement "UPDATE employees SET id = 5, name = 'New Name';"
+      `shouldBe`
+      Right (UpdateStatement {
+        tablename = "employees",
+        assignedValues = [("id", IntegerValue 5), ("name", StringValue "New Name")],
+        whereArgs = []})
+    it "error message on update without set" $ do
+      Lib2.parseStatement "UPDATE employees WHERE id=otherId;"
+      `shouldSatisfy`
+      isLeft
+    it "error message on update without table name specified" $ do
+      Lib2.parseStatement "UPDATE SET id = 5 WHERE id=otherId;"
+      `shouldSatisfy`
+      isLeft
+    it "error message on update without setting any fields" $ do
+      Lib2.parseStatement "UPDATE employees SET WHERE id=otherId;"
+      `shouldSatisfy`
+      isLeft
+
+
+    it "parses insert with column names provided" $ do
+      Lib2.parseStatement "INSERT INTO employees (name, jobTitle) VALUES ('Inserted Name', 'Inserted Job Title');"
+      `shouldBe`
+      Right (InsertIntoStatement {
+        tablename = "employees",
+        valuesOrder = Just ["name", "jobTitle"],
+        values = [StringValue "Inserted Name", StringValue "Inserted Job Title"]
+      })
+    it "parses insert without column names provided" $ do
+      Lib2.parseStatement "INSERT INTO employees VALUES ('Inserted Name', 'Inserted Job Title');"
+      `shouldBe`
+      Right (InsertIntoStatement {
+        tablename = "employees",
+        valuesOrder = Nothing,
+        values = [StringValue "Inserted Name", StringValue "Inserted Job Title"]
+      })  
+    it "parses with number constant as value" $ do
+      Lib2.parseStatement "INSERT INTO employees (name, id) VALUES ('Inserted Name', 1);"
+      `shouldBe`
+      Right (InsertIntoStatement {
+        tablename = "employees",
+        valuesOrder = Just ["name", "id"],
+        values = [StringValue "Inserted Name", IntegerValue 1]
+      })
+    it "parses insert with keywords case insensitive" $ do
+      Lib2.parseStatement "iNSeRt inTo employees (name, jobTitle) vALueS ('Inserted Name', 'Inserted Job Title');"
+      `shouldBe`
+      Right (InsertIntoStatement {
+        tablename = "employees",
+        valuesOrder = Just ["name", "jobTitle"],
+        values = [StringValue "Inserted Name", StringValue "Inserted Job Title"]
+      })
+    it "parses insert with extra whitespace" $ do
+      Lib2.parseStatement "INSERT    INTO     employees  (  name,jobTitle  )  VALUES (  'Inserted Name'    ,    'Inserted Job Title'   ) ; "
+      `shouldBe`
+      Right (InsertIntoStatement {
+        tablename = "employees",
+        valuesOrder = Just ["name", "jobTitle"],
+        values = [StringValue "Inserted Name", StringValue "Inserted Job Title"]
+      })
+    it "error message on insert when value missing" $ do
+      Lib2.parseStatement "INSERT INTO employees (name, jobTitle) VALUES;"
+      `shouldSatisfy`
+      isLeft
+    it "error message on insert when no table provided" $ do
+      Lib2.parseStatement "INSERT INTO VALUES ('Inserted Name', 'Inserted Job Title');"
+      `shouldSatisfy`
+      isLeft
+    it "error message on insert when no values provided" $ do
+      Lib2.parseStatement "INSERT INTO employees (name, jobTitle) VALUES;"
+      `shouldSatisfy`
+      isLeft
+
+
+
+    it "parses delete with string constant in where" $ do
+      Lib2.parseStatement "DELETE FROM employees WHERE name = 'Employee Name';"
+      `shouldBe`
+      Right (DeleteStatement {
+        tablename = "employees",
+        whereArgs = [(ColumnName (Nothing, "name"), Constant "Employee Name", whereEq)]
+      })
+    it "parses delete with number constant in where" $ do
+      Lib2.parseStatement "DELETE FROM employees WHERE id = 1;"
+      `shouldBe`
+      Right (DeleteStatement {
+        tablename = "employees",
+        whereArgs = [(ColumnName (Nothing, "id"), Constant "1", whereEq)]
+      })
+    it "parses delete with column name in where" $ do
+      Lib2.parseStatement "DELETE FROM employees WHERE name = surname;"
+      `shouldBe`
+      Right (DeleteStatement {
+        tablename = "employees",
+        whereArgs = [(ColumnName (Nothing, "name"), ColumnName (Nothing, "surname"), whereEq)]
+      })
+    it "parses delete keywords case insensitive" $ do
+      Lib2.parseStatement "dElEtE FrOm employees wHerE name = 'Employee Name';"
+      `shouldBe`
+      Right (DeleteStatement {
+        tablename = "employees",
+        whereArgs = [(ColumnName (Nothing, "name"), Constant "Employee Name", whereEq)]
+      })
+    it "parses delete keywords with extra whitespace" $ do
+      Lib2.parseStatement "DELETE      FROM   employees  WHERE   name         ='Employee Name'  ;    "
+      `shouldBe`
+      Right (DeleteStatement {
+        tablename = "employees",
+        whereArgs = [(ColumnName (Nothing, "name"), Constant "Employee Name", whereEq)]
+      })
+    it "parses delete without where" $ do
+      Lib2.parseStatement "DELETE FROM employees;"
+      `shouldBe`
+      Right (DeleteStatement {
+        tablename = "employees",
+        whereArgs = []
+      })
+    it "error message on update without table name specified" $ do
+      Lib2.parseStatement "DELETE FROM WHERE name = 'Employee Name';"
+      `shouldSatisfy`
+      isLeft
+
+
+
+      
+whereEq :: String -> String -> Bool
+whereEq _ _ = True
 
 
 {-
