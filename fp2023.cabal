@@ -120,6 +120,8 @@ test-suite fp2023-test
   build-depends:
       base >=4.7 && <5
     , fp2023
+    , free
     , hspec
     , raw-strings-qq
+    , time
   default-language: Haskell2010

@@ -13,9 +13,12 @@ import Test.Hspec (shouldBe)
 import Data.Either (Either(Right))
 import DataFrame (DataFrame(DataFrame), ColumnType (BoolType, IntegerType), Value (IntegerValue))
 import qualified Lib2
-import qualified Lib2
 import qualified Data.Ord as Lib2
 import Text.Read (Lexeme(String))
+import Data.IORef
+import Control.Monad.Free (Free (..))
+import Data.Time (Day (..), UTCTime (..), secondsToDiffTime)
+import Data.Time.Calendar.OrdinalDate (fromOrdinalDate)
 
 
 main :: IO ()
@@ -24,6 +27,7 @@ main = hspec $ do
     it "handles empty lists" $ do
       Lib1.findTableByName [] "" `shouldBe` Nothing
     it "handles empty names" $ do
+      
       Lib1.findTableByName D.database "" `shouldBe` Nothing
     it "can find by name" $ do
       Lib1.findTableByName D.database "employees" `shouldBe` Just (snd D.tableEmployees)
@@ -273,7 +277,7 @@ main = hspec $ do
           [IntegerValue 2, StringValue "Ed", StringValue "Dl", BoolValue False],
           [NullValue, NullValue, NullValue, NullValue]
         ]) `shouldBe` 
-       filter (\x -> x /= ' ' && x /= '\n') [r|
+        filter (\x -> x /= ' ' && x /= '\n') [r|
         [
           [
             ["id","IT"],
@@ -570,7 +574,32 @@ main = hspec $ do
       `shouldSatisfy`
       isLeft
 
+type MemoryDatabase = IORef [(String, String)]
 
+testSetup :: IO MemoryDatabase
+testSetup = newIORef $ map (\(a, b) -> (a, Lib3.serialize b)) D.database
+
+--when calling this in tests you have to give it memoryDBForTests as the first argument
+runExecuteIO :: MemoryDatabase -> Lib3.Execution r -> IO r
+runExecuteIO _ (Pure r) = return r
+runExecuteIO memoryDB (Free step) = do
+    next <- runStep step
+    runExecuteIO memoryDB next
+    where
+        runStep :: Lib3.ExecutionAlgebra a -> IO a
+        runStep (Lib3.GetTime next) = return (UTCTime {utctDay = fromOrdinalDate 2023 333, utctDayTime = secondsToDiffTime 0})  >>= return . next
+        runStep (Lib3.SaveTable name content next) = modifyIORef' memoryDB (modifyDatabase (name, content)) >>= return . next
+        runStep (Lib3.LoadTable name next) = do
+          table <- fmap (lookup name) (readIORef memoryDB)
+          case table of
+            Just a -> return a >>= return . next
+            Nothing -> return "" >>= return . next
+
+modifyDatabase :: (String, String) -> [(String, String)] -> [(String, String)]
+modifyDatabase a [] = [a]
+modifyDatabase (name, content) ((x, y):xs) = case x == name of
+  True -> ((x, content):xs)
+  False -> ((x, y) : modifyDatabase (name, content) xs)
 
       
 whereEq :: String -> String -> Bool
