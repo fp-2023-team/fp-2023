@@ -17,6 +17,8 @@ import System.Console.Repline
     evalRepl,
   )
 import System.Console.Terminal.Size (Window, size, width)
+import Control.Applicative (liftA)
+import qualified Lib2
 
 type Repl a = HaskelineT IO a
 
@@ -68,3 +70,32 @@ runExecuteIO (Free step) = do
         runStep (Lib3.GetTime next) = getCurrentTime >>= return . next
         runStep (Lib3.SaveTable name content next) = writeFile ("./db/" ++ name ++ ".json") content >>= return . next
         runStep (Lib3.LoadTable name next) = readFile ("./db/" ++ name ++ ".json") >>= return . next
+        -- runStep (Lib3.LoadDatabase next) = [
+        --   runStep $ Lib3.LoadTable "tableEmployees" >>= Lib3.DeserializeTable >>= return,
+        --   runStep $ Lib3.LoadTable "tableInvalid1" >>= Lib3.DeserializeTable return, 
+        --   runStep $ Lib3.LoadTable "tableInvalid2" >>= Lib3.DeserializeTable return,
+        --   runStep $ Lib3.LoadTable "tableLongStrings" >>= Lib3.DeserializeTable return, 
+        --   runStep $ Lib3.LoadTable "tableWithNulls" >>= Lib3.DeserializeTable return, 
+        --   runStep $ Lib3.LoadTable "tableWithDuplicateColumns" >>= Lib3.DeserializeTable return,
+        --   do
+        --     tableContent <- runStep $ Lib3.LoadTable "tableNoRows" return
+        --     runStep $ Lib3.DeserializeTable tableContent return
+        --   ] >>= return . next
+        runStep (Lib3.SerializeTable dataframe next) = pure (Lib3.serialize dataframe) >>= return . next --temp
+        runStep (Lib3.DeserializeTable tableContent next) = pure (Lib3.deserialize tableContent) >>= return . next
+        runStep (Lib3.GetParsedStatement statement next) = pure (Lib2.parseStatement statement) >>= return . next
+        runStep (Lib3.GetExecutionResult statement database next) = pure (Lib2.executeStatement statement database) >>= return . next
+    -- serializedTable <- Lib3.serialize $ Lib3.convertDF dataframe
+    -- pure $ next serializedTable
+
+--LoadDatabase next -> do
+--     database <- [
+--       executeCommand $ LoadTable "tableEmployees",
+--       executeCommand $ LoadTable "tableInvalid1", 
+--       executeCommand $ LoadTable "tableInvalid2",
+--       executeCommand $ LoadTable "tableLongStrings", 
+--       executeCommand $ LoadTable "tableWithNulls", 
+--       executeCommand $ LoadTable "tableWithDuplicateColumns",
+--       executeCommand $ LoadTable "tableNoRows"
+--       ]
+--     pure $ next database
