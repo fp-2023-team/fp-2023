@@ -45,8 +45,7 @@ main = hspec $ do
   describe "Lib1.renderDataFrameAsTable" $ do
     it "renders a table" $ do
       Lib1.renderDataFrameAsTable 100 (snd D.tableEmployees) `shouldSatisfy` not . null
-----------------------------------------------------------------------------------------------------------------------------------------------
-{-
+
   describe "Lib2.parseStatement" $ do
     it "parses a show tables statement" $ do
       Lib2.parseStatement "SHOW TABLES;" `shouldBe` (parseTest 0)
@@ -78,61 +77,61 @@ main = hspec $ do
     it "executes a show tables statement" $ do
       case Lib2.parseStatement "SHOW TABLES;" of 
         Left err -> err `shouldBe` "should have successfully parsed"
-        Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes1
+        Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right testRes1
     it "executes a show tables statement case insensitively" $ do
       case Lib2.parseStatement "ShoW TAbLeS;" of 
         Left err -> err `shouldBe` "should have successfully parsed"
-        Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes1
+        Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right testRes1
     it "executes a show table statement" $ do
       case Lib2.parseStatement "SHOW TABLE employees;" of 
         Left err -> err `shouldBe` "should have successfully parsed"
-        Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes2
+        Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right testRes2
     it "does not execute a show table statement with a case insensitive name" $ do
       case Lib2.parseStatement "SHOW TABLE emplOyEes;" of
         Left err -> err `shouldBe` err
-        Right ps -> Lib2.executeStatement ps `shouldSatisfy` isLeft
+        Right ps -> Lib2.executeStatement ps D.database `shouldSatisfy` isLeft
     it "executes a select statement with columns" $ do
       case Lib2.parseStatement "SELECT id, surname FROM employees;" of 
         Left err -> err `shouldBe` "should have successfully parsed"
-        Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes3
+        Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right testRes3
     it "does not execute a select statement with wrong columns" $ do
       case Lib2.parseStatement "SELECT id, birthday FROM employees;" of
         Left err -> err `shouldBe` err
-        Right ps -> Lib2.executeStatement ps `shouldSatisfy` isLeft
+        Right ps -> Lib2.executeStatement ps D.database `shouldSatisfy` isLeft
     it "executes a max function" $ do
       case Lib2.parseStatement "SELECT MAX(id) FROM employees;" of 
         Left err -> err `shouldBe` "should have successfully parsed"
-        Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
+        Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                           [[IntegerValue 2]])
     it "executes a sum function" $ do
       case Lib2.parseStatement "SELECT SUM(id) FROM employees;" of 
         Left err -> err `shouldBe` "should have successfully parsed"
-        Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
+        Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                           [[IntegerValue 3]])
     it "executes a where or function with strings, = comparison" $ do
       case Lib2.parseStatement "SELECT * FROM duplicates WHERE x = 'a' OR y = 'a';" of 
         Left err -> err `shouldBe` "should have successfully parsed"
-        Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes4
+        Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right testRes4
     it "executes a where function with strings, <> comparison" $ do
       case Lib2.parseStatement "SELECT * FROM duplicates WHERE x <> y;" of 
         Left err -> err `shouldBe` "should have successfully parsed"
-        Right ps -> Lib2.executeStatement ps `shouldBe` Right testRes5
+        Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right testRes5
     it "executes a where or function with strings, >= comparison" $ do
       case Lib2.parseStatement "SELECT id FROM employees WHERE 'a' >= 'b' OR name >= 'Z';" of 
         Left err -> err `shouldBe` "should have successfully parsed"
-        Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
+        Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                         [[NullValue]])
     it "executes a where or function with strings, <= comparison, combined with sum" $ do
       case Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" of 
         Left err -> err `shouldBe` "should have successfully parsed"
-        Right ps -> Lib2.executeStatement ps `shouldBe` Right (DataFrame [Column "id" IntegerType] 
+        Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                         [[IntegerValue 2]])
-
+{-
   ---------------------------------------------------------------------------------------------------------------
   describe "Lib2.parseStatement Task 3" $ do
     it "parses a show tables statement" $ do
       Lib2.parseStatement "SHOW TABLES;" `shouldBe` (parseTest 0)
-  -}
+  
   describe "Lib3.deserialize" $ do
     it "deserializes valid table" $ do
       Lib3.deserialize [r|
@@ -361,9 +360,9 @@ main = hspec $ do
         whereArgs = []})
       
 
+-}
 
 
-{-
 testRes1 :: DataFrame
 testRes1 = DataFrame
   [Column "table_name" StringType]
@@ -416,12 +415,12 @@ type ErrorMessage = String
 parseTest :: Int -> Either ErrorMessage ParsedStatement
 parseTest 0 = Right (ShowTableStatement {showTableArgs = Nothing})
 parseTest 1 = Right (ShowTableStatement {showTableArgs = Just "employees"})
-parseTest 2 = Right (SelectStatement {selectArgs = [Right "id", Right "surname"], fromArgs = "employees", whereArgs = []})
-parseTest 3 = Right (SelectStatement {selectArgs = [Left ("id", dummy1)], fromArgs = "employees", whereArgs = []})
-parseTest 4 = Right (SelectStatement {selectArgs = [Right "*"], fromArgs = "duplicates", whereArgs = [(ColumnName "x", Constant "a", dummy2), (ColumnName "y", Constant "a", dummy2)]})
-parseTest 5 = Right (SelectStatement {selectArgs = [Right "*"], fromArgs = "duplicates", whereArgs = [(ColumnName "x", ColumnName "y", dummy2)]})
-parseTest 6 = Right (SelectStatement {selectArgs = [Right "id"], fromArgs = "employees", whereArgs = [(Constant "a", Constant "b", dummy2), (ColumnName "name", Constant "Z", dummy2)]})
-parseTest 7 = Right (SelectStatement {selectArgs = [Left ("id", dummy1)], fromArgs = "employees", whereArgs = [(ColumnName "name", Constant "E", dummy2), (ColumnName "surname", Constant "E", dummy2)]})
+parseTest 2 = Right (SelectStatement {selectArgs = [Right (Nothing, "id"), Right (Nothing, "surname")], fromArgs = ["employees"], whereArgs = []})
+parseTest 3 = Right (SelectStatement {selectArgs = [Left ([(Nothing, "id")], Func1 dummy1)], fromArgs = ["employees"], whereArgs = []})
+parseTest 4 = Right (SelectStatement {selectArgs = [Right (Nothing, "*")], fromArgs = ["duplicates"], whereArgs = [(ColumnName (Nothing, "x"), Constant "a", dummy2), (ColumnName (Nothing, "y"), Constant "a", dummy2)]})
+parseTest 5 = Right (SelectStatement {selectArgs = [Right (Nothing, "*")], fromArgs = ["duplicates"], whereArgs = [(ColumnName (Nothing, "x"), ColumnName(Nothing, "y"), dummy2)]})
+parseTest 6 = Right (SelectStatement {selectArgs = [Right (Nothing, "id")], fromArgs = ["employees"], whereArgs = [(Constant "a", Constant "b", dummy2), (ColumnName (Nothing, "name"), Constant "Z", dummy2)]})
+parseTest 7 = Right (SelectStatement {selectArgs = [Left ([(Nothing, "id")], Func1 dummy1)], fromArgs = ["employees"], whereArgs = [(ColumnName (Nothing, "name"), Constant "E", dummy2), (ColumnName (Nothing, "surname"), Constant "E", dummy2)]})
 parseTest _ = Left "error"
 
 dummy1 :: [Value] -> Value
@@ -429,5 +428,5 @@ dummy1 _ = NullValue
 
 dummy2 :: String -> String -> Bool
 dummy2 a b = True
--}
+
 
