@@ -119,59 +119,7 @@ getTable name = do
   case (deserializedTable1) of
     Nothing -> return $ Left $ "Failed to deserialize table \"" ++ name ++ "\""
     Just a -> Pure $ Right (name, a)
-  -- saveTable "test" sql
-  -- deserializeTable "employees"
-    -- case parseStatement sql of
-    --     Left err -> return $ Left err
-    --     Right parsed -> return $ executeStatement parsed InMemoryTables.database
-
--- DSL =====================================================================
--- executeCommand :: ExecutionAlgebra next -> (Either ErrorMessage DataFrame)
--- executeCommand command = case (command) of
---   GetTime next -> do
---     time <- getCurrentTime
---     pure $ next time
---   SaveTable tablename content next -> do
---     writeFile ("db/" ++ tablename ++ ".json") content
---     pure $ next ()
---   LoadTable tablename next -> do
---     contents <- Prelude.readFile ("db/" ++ tablename ++ ".json")
---     pure $ next contents
---   SerializeTable dataframe next -> do
---     serializedTable <- Lib3.serialize $ Lib3.convertDF dataframe
---     pure $ next serializedTable
---   DeserializeTable tableContent next -> do
---     dataFrame <- Lib3.unconvertDF $ Lib3.deserialize tableContent
---     pure $ next dataFrame
---   LoadDatabase next -> do
---     database <- [
---       executeCommand $ LoadTable "tableEmployees",
---       executeCommand $ LoadTable "tableInvalid1", 
---       executeCommand $ LoadTable "tableInvalid2",
---       executeCommand $ LoadTable "tableLongStrings", 
---       executeCommand $ LoadTable "tableWithNulls", 
---       executeCommand $ LoadTable "tableWithDuplicateColumns",
---       executeCommand $ LoadTable "tableNoRows"
---       ]
---     pure $ next database
---   GetParsedStatement statement next -> do
---     result <- parseStatement statement
---     pure $ next result
---   GetExecutionResult statement next -> do
---     result <- executeStatement statement
---     pure $ next result
-
--- main :: IO ()
--- main = putAll database
-
--- putAll :: [(TableName, DataFrame)] -> IO ()
--- putAll [] = putStrLn "done"
--- putAll (x:xs) = do
---   writeFile ("db/" ++ fst x ++ ".json") (Lib3.serialize $ Lib3.convertDF $ snd x)
---   putStrLn $ show $ Lib3.isTheSame $ snd x
---   putAll xs
-
--- ================================================
+  
 class JSONserializable a where
   serialize :: a -> String
   deserialize :: String -> Maybe a
