@@ -1,7 +1,7 @@
 {-# LANGUAGE QuasiQuotes #-}
 import Text.RawString.QQ
 import Data.Either
-import Data.Maybe ()
+import Data.Maybe (Maybe (Just))
 import InMemoryTables qualified as D
 import Lib1
 import Lib2
@@ -611,37 +611,45 @@ main = hspec $ do
     it "executes update with string constant in where" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "UPDATE employees SET id = 42, name = 'New Vi' WHERE name = 'Vi';")
-      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 42,StringValue "New Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"]])
+      dbdf <- getTableFromDB db "employees"
+      dbdf `shouldBe` Just (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 42,StringValue "New Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"]])
     it "executes update with column name in where" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "UPDATE employees SET id = 42, name = 'New Vi' WHERE name = surname;")
-      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 1,StringValue "Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"]])
+      dbdf <- getTableFromDB db "employees"
+      dbdf `shouldBe` Just (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 1,StringValue "Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"]])
     it "executes update without where" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "UPDATE employees SET id = 42, name = 'New Vi';")
-      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 42,StringValue "New Vi",StringValue "Po"],[IntegerValue 42,StringValue "New Vi",StringValue "Dl"]])
+      dbdf <- getTableFromDB db "employees"
+      dbdf `shouldBe` Just (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 42,StringValue "New Vi",StringValue "Po"],[IntegerValue 42,StringValue "New Vi",StringValue "Dl"]])
 
 
     it "executes insert with column names provided" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "INSERT INTO employees (surname, id, name) VALUES ('Inserted Test Surname', 42, 'Inserted Test Name');")
-      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 1,StringValue "Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"],[IntegerValue 42,StringValue "Inserted Test Name",StringValue "Inserted Test Surname"]])
+      dbdf <- getTableFromDB db "employees"
+      dbdf `shouldBe` Just (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 1,StringValue "Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"],[IntegerValue 42,StringValue "Inserted Test Name",StringValue "Inserted Test Surname"]])
     it "executes insert without column names provided" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "INSERT INTO employees VALUES (42, 'Inserted Test Name', 'Inserted Test Surname');")
-      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 1,StringValue "Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"],[IntegerValue 42,StringValue "Inserted Test Name",StringValue "Inserted Test Surname"]])
+      dbdf <- getTableFromDB db "employees"
+      dbdf `shouldBe` Just (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 1,StringValue "Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"],[IntegerValue 42,StringValue "Inserted Test Name",StringValue "Inserted Test Surname"]])
     it "executes delete with string constant in where" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "DELETE FROM employees WHERE name = 'Vi';")
-      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 2,StringValue "Ed",StringValue "Dl"]])
+      dbdf <- getTableFromDB db "employees"
+      dbdf `shouldBe` Just (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 2,StringValue "Ed",StringValue "Dl"]])
     it "executes delete with column name in where" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "DELETE FROM employees WHERE name = surname;")
-      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 1,StringValue "Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"]])
+      dbdf <- getTableFromDB db "employees"
+      dbdf `shouldBe` Just (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [[IntegerValue 1,StringValue "Vi",StringValue "Po"],[IntegerValue 2,StringValue "Ed",StringValue "Dl"]])
     it "executes delete without where" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "DELETE FROM employees;")
-      df `shouldBe` Right (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [])
+      dbdf <- getTableFromDB db "employees"
+      dbdf `shouldBe` Just (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [])
 
 
 type MemoryDatabase = IORef [(String, String)]

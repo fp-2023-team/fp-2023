@@ -73,7 +73,7 @@ getExecutionResult statement database = liftF $ GetExecutionResult statement dat
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
   parsed <- getParsedStatement sql
-  database <- getRelevantTables ["duplicates", "employees", "flags", "invalid1", "invalid2", "long_strings"]
+  database <- getRelevantTables ["duplicates", "employees", "flags", "invalid1", "invalid2", "long_strings", "jobs"]
   executionResult <- case(parsed) of
     Left e -> return $ Left e 
     Right parsedStmt -> case(database) of
