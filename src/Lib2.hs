@@ -371,6 +371,7 @@ parseValue a = do
       word | parseCompare word "null" -> Right (NullValue, sym, remainder)
            | parseCompare word "true" -> Right (BoolValue True, sym, remainder)
            | isNumber word -> Right (IntegerValue $ getNumber word, sym, remainder)
+           | otherwise -> Left $ "Unexpected value: " ++ word
   return (manipulatedWord, newsym, newrem)
 
 parseDelete :: String -> Either ErrorMessage ParsedStatement
