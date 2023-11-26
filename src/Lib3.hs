@@ -39,7 +39,7 @@ data ExecutionAlgebra next
     | SerializeTable DataFrame (TableContent -> next)
     | DeserializeTable TableContent (Maybe DataFrame -> next)
     | GetParsedStatement String (Either ErrorMessage ParsedStatement -> next)
-    | GetExecutionResult ParsedStatement [(TableName, DataFrame)] (Either ErrorMessage DataFrame -> next)
+    | GetExecutionResult ParsedStatement [(TableName, DataFrame)] UTCTime (Either ErrorMessage DataFrame -> next)
     -- feel free to add more constructors here
     deriving Functor
 
@@ -66,19 +66,20 @@ deserializeTable content = liftF $ DeserializeTable content id
 getParsedStatement :: String -> Execution (Either ErrorMessage ParsedStatement)
 getParsedStatement statement = liftF $ GetParsedStatement statement id
 
-getExecutionResult :: ParsedStatement -> [(TableName, DataFrame)] -> Execution (Either ErrorMessage DataFrame)
-getExecutionResult statement database = liftF $ GetExecutionResult statement database id
+getExecutionResult :: ParsedStatement -> [(TableName, DataFrame)] -> UTCTime -> Execution (Either ErrorMessage DataFrame)
+getExecutionResult statement database time = liftF $ GetExecutionResult statement database time id
 
 -- We're using a temporary from memory database
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
   parsed <- getParsedStatement sql
   database <- getRelevantTables ["duplicates", "employees", "flags", "invalid1", "invalid2", "long_strings", "jobs"]
+  time <- getTime
   executionResult <- case(parsed) of
     Left e -> return $ Left e 
     Right parsedStmt -> case(database) of
       Left e -> return $ Left e
-      Right exist -> getExecutionResult parsedStmt exist
+      Right exist -> getExecutionResult parsedStmt exist time
   case (executionResult) of
     Left e -> return $ Left e
     Right result -> case (parsed) of
