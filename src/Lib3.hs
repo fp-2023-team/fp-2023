@@ -72,18 +72,12 @@ getExecutionResult statement database = liftF $ GetExecutionResult statement dat
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
   parsed <- getParsedStatement sql
-  table1 <- getTable "duplicates"
-  table2 <- getTable "employees"
-  table3 <- getTable "flags"
-  table4 <- getTable "foo"
-  table5 <- getTable "invalid1"
-  table6 <- getTable "invalid2"
-  table7 <- getTable "long_strings"
+  database <- getRelevantTables ["duplicates", "employees", "flags", "invalid1", "invalid2", "long_strings"]
   executionResult <- case(parsed) of
     Left e -> return $ Left e 
-    Right parsedStmt -> case(table2) of
+    Right parsedStmt -> case(database) of
       Left e -> return $ Left e
-      Right exist -> getExecutionResult parsedStmt [exist]
+      Right exist -> getExecutionResult parsedStmt exist
   case (executionResult) of
     Left e -> return $ Left e
     Right result -> case (parsed) of
@@ -99,6 +93,19 @@ executeSql sql = do
         persistTable "employees" result
         return $ Right result
 
+getRelevantTables :: [TableName] -> Execution (Either ErrorMessage [(TableName, DataFrame)])
+getRelevantTables [] = do
+  Pure $ Right []
+getRelevantTables (x:xs) = do
+  table <- getTable x
+  case table of
+    Left e -> return $ Left e
+    Right goodTable -> do
+      otherTables <- getRelevantTables xs
+      case otherTables of
+        Left e -> return $ Left e
+        Right goodTables -> Pure $ Right (goodTable : goodTables)
+
 persistTable :: TableName -> DataFrame -> Execution ()
 persistTable name duom = do
   serial <- serializeTable duom
@@ -108,9 +115,8 @@ getTable :: TableName -> Execution (Either ErrorMessage (TableName, DataFrame))
 getTable name = do
   table <- loadTable name
   deserializedTable1 <- deserializeTable (table) 
-  --existingDeserialisedTable1 <- 
   case (deserializedTable1) of
-    Nothing -> return $ Left "Failed to deserialize table \"Employees\""
+    Nothing -> return $ Left $ "Failed to deserialize table \"" ++ name ++ "\""
     Just a -> Pure $ Right (name, a)
   -- saveTable "test" sql
   -- deserializeTable "employees"

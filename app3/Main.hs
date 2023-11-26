@@ -9,6 +9,7 @@ import Data.List qualified as L
 import Lib1 qualified
 import Lib2 qualified
 import Lib3 qualified
+import InMemoryTables (database)
 import System.Console.Repline
   ( CompleterStyle (Word),
     ExitDecision (Exit),
@@ -53,6 +54,7 @@ cmd c = do
     cmd' :: Integer -> IO (Either String String)
     cmd' s = do
       df <- runExecuteIO $ Lib3.executeSql c 
+      --df <- runExecuteLocal $ Lib3.executeSql c 
       return $ Lib1.renderDataFrameAsTable s <$> df
 
 main :: IO ()
@@ -81,7 +83,7 @@ runExecuteIO (Free step) = do
         --     tableContent <- runStep $ Lib3.LoadTable "tableNoRows" return
         --     runStep $ Lib3.DeserializeTable tableContent return
         --   ] >>= return . next
-        runStep (Lib3.SerializeTable dataframe next) = pure (Lib3.serialize dataframe) >>= return . next --temp
+        runStep (Lib3.SerializeTable dataframe next) = pure (Lib3.serialize dataframe) >>= return . next
         runStep (Lib3.DeserializeTable tableContent next) = pure (Lib3.deserialize tableContent) >>= return . next
         runStep (Lib3.GetParsedStatement statement next) = pure (Lib2.parseStatement statement) >>= return . next
         runStep (Lib3.GetExecutionResult statement database next) = pure (Lib2.executeStatement statement database) >>= return . next
@@ -99,3 +101,19 @@ runExecuteIO (Free step) = do
 --       executeCommand $ LoadTable "tableNoRows"
 --       ]
 --     pure $ next database
+
+runExecuteLocal :: Lib3.Execution r -> r
+runExecuteLocal (Pure r) = return r
+runExecuteLocal (Free step) = do
+    next <- runStep step
+    runExecuteLocal next
+    where
+        -- probably you will want to extend the interpreter
+        runStep :: Lib3.ExecutionAlgebra a -> a
+        runStep (Lib3.GetTime next) = getCurrentTime >>= return . next
+        runStep (Lib3.SaveTable name content next) = return . next
+        runStep (Lib3.LoadTable name next) = Lib3.serialize $ InMemoryTables.database !! 0 >>= return . next
+        runStep (Lib3.SerializeTable dataframe next) = pure (Lib3.serialize dataframe) >>= return . next
+        runStep (Lib3.DeserializeTable tableContent next) = pure (Lib3.deserialize tableContent) >>= return . next
+        runStep (Lib3.GetParsedStatement statement next) = pure (Lib2.parseStatement statement) >>= return . next
+        runStep (Lib3.GetExecutionResult statement database next) = pure (Lib2.executeStatement statement database) >>= return . next
