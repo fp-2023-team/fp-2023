@@ -586,7 +586,15 @@ executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' 
                 (zip [(tableName, colName) | (tableName, DataFrame cols _) <- usedTables, Column colName _ <- cols]
                     (transpose $ map (map snd) filteredCartesianHell))
                 selectArgs'
-            Left $ show (map fst selectedColumnValues) ++ show (transpose $ map snd selectedColumnValues)
+            let columnNames = map fst selectedColumnValues
+            let rows = transpose $ map snd selectedColumnValues
+            Right $ DataFrame
+                [Column ((maybe "" (++ ".") tableName) ++ colName) StringType
+                    | (tableName, colName) <- columnNames,
+                        (tableName', DataFrame cols _) <- usedTables,
+                        (Column colName' colType') <- cols,
+                        maybe True (== tableName') tableName && colName == colName']
+                rows
     --_ <- Left $ show filteredCartesianHell
     -- _ <- if nullOrAny (null) (fmap findTableByName tableNames') then
    --         Left "Couldn't find at least one table in the database"
@@ -656,10 +664,10 @@ executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' 
                                 (StringValue value):[] -> value
                                 _ -> ""
         applySelectArgs :: [((TableName, String), [Value])]
-            -> [Either ([(Maybe String, String)], Function) (Maybe String, String)]
-            -> Either ErrorMessage [((TableName, String), [Value])]
+            -> [Either ([(Maybe TableName, String)], Function) (Maybe TableName, String)]
+            -> Either ErrorMessage [((Maybe TableName, String), [Value])]
         applySelectArgs columnsWithValues selects = case [val | (Right val) <- selects] of
-                [] -> Right $ columnsWithValues
+                [] -> Left $ "Functions not implemented yet"
                 selectColumnNames -> forEach
                     (\selectTableColName acc -> case acc of
                         Left _ -> acc
@@ -669,8 +677,8 @@ executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' 
                                 (Just selectTableName, selectColName) -> selectTableName == tableName && selectColName == colName)
                             columnsWithValues of
                             [] -> Left $ "Could not find column " ++ show selectTableColName ++ "in 'select'"
-                            match:[] -> Right $ match:trueAcc
-                            match:matches -> Left $ "Matched column " ++ show selectColumnNames ++ "more than once in 'select'")
+                            match@(_, value):[] -> Right $ (selectTableColName, value):trueAcc
+                            match:matches -> Left $ "Matched column " ++ show selectTableColName ++ "more than once in 'select'")
                     (reverse selectColumnNames)
                     (Right [])
             --columnSelectedTable <- applyColumnSelection table [name | Right name <- selects]
