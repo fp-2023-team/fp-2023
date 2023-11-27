@@ -589,7 +589,7 @@ main = hspec $ do
     it "executes select with where clause" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.name = jobs.title;")
-      df `shouldBe` Right (DataFrame [Column "name" StringType,Column "title" StringType] [])
+      df `shouldBe` Right (DataFrame [Column "employees.name" StringType,Column "jobs.title" StringType] [])
     it "executes select with where OR clause" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.name >= jobs.title OR employees.surname <= jobs.title;")

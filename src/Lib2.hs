@@ -66,6 +66,7 @@ data Function = Func0 {
 
 -- Functions to implement
 max :: [Value] -> Value
+max [] = NullValue
 max values@(value:_) = case value of
     IntegerValue _ -> maxInteger values
     StringValue _ -> maxString values
@@ -95,6 +96,7 @@ max values@(value:_) = case value of
                 StringValue $ maximum values'
 
 sum :: [Value] -> Value
+sum [] = NullValue
 sum values@(value:_) = case value of
     IntegerValue _ -> sumInteger values
     _ -> NullValue
@@ -578,10 +580,16 @@ executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' 
         Right (Just _, "*"):_ -> Left $ "Wildcard selector must be used without table name in 'select'"
         Right (_, "*"):xs -> Left $ "Wildcard selector must be used by itself in 'select'"
         _ -> do
-            selectedColumnValues <- applySelectArgs
-                (zip [((tableName, colName), colType) | (tableName, DataFrame cols _) <- usedTables, Column colName colType <- cols]
+            colValues <- Right $ if (null filteredCartesianHell)
+                then [(((tableName, colName), colType), [])
+                        | (tableName, DataFrame cols _) <- usedTables,
+                            Column colName colType <- cols]
+                else (zip
+                    [((tableName, colName), colType)
+                        | (tableName, DataFrame cols _) <- usedTables,
+                            Column colName colType <- cols]
                     (transpose $ map (map snd) filteredCartesianHell))
-                selectArgs'
+            selectedColumnValues <- applySelectArgs colValues selectArgs'
             Right $ DataFrame
                 [Column ((maybe "" (++ ".") tableName) ++ colName) colType
                     | (((tableName, colName), colType), _) <- selectedColumnValues]
