@@ -579,18 +579,17 @@ executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' 
         Right (_, "*"):xs -> Left $ "Wildcard selector must be used by itself in 'select'"
         _ -> do
             selectedColumnValues <- applySelectArgs
-                (zip [(tableName, colName) | (tableName, DataFrame cols _) <- usedTables, Column colName _ <- cols]
+                (zip [((tableName, colName), colType) | (tableName, DataFrame cols _) <- usedTables, Column colName colType <- cols]
                     (transpose $ map (map snd) filteredCartesianHell))
                 selectArgs'
-            let columnNames = map fst selectedColumnValues
-            let rows = transpose $ map snd selectedColumnValues
             Right $ DataFrame
-                [Column ((maybe "" (++ ".") tableName) ++ colName) StringType
-                    | (tableName, colName) <- columnNames,
-                        (tableName', DataFrame cols _) <- usedTables,
-                        (Column colName' colType') <- cols,
-                        maybe True (== tableName') tableName && colName == colName']
-                rows
+                [Column ((maybe "" (++ ".") tableName) ++ colName) colType
+                    | (((tableName, colName), colType), _) <- selectedColumnValues]
+                (transpose [values | (_, values) <- selectedColumnValues])
+            --Right $ DataFrame
+            --    [Column ((maybe "" (++ ".") tableName) ++ colName) colType
+            --        | ((tableName, colName), colType, _) <- selectedColumnValues]
+            --    [values | (_, _, values) <- selectedColumnValues]
     where
         isStringColumn :: Column -> Bool
         isStringColumn (Column _ StringType) = True
@@ -653,23 +652,47 @@ executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' 
                                 namedRow of
                                 (StringValue value):[] -> value
                                 _ -> ""
-        applySelectArgs :: [((TableName, String), [Value])]
+        applySelectArgs :: [(((TableName, String), ColumnType), [Value])]
             -> [Either ([(Maybe TableName, String)], Function) (Maybe TableName, String)]
-            -> Either ErrorMessage [((Maybe TableName, String), [Value])]
+            -> Either ErrorMessage [(((Maybe TableName, String), ColumnType), [Value])]
+        --applySelectArgs columnsWithValues selects = Right $ [(((Just tableName, colName), colType), values) | (((tableName, colName), colType), values) <- columnsWithValues]
         applySelectArgs columnsWithValues selects = case [val | (Right val) <- selects] of
-                [] -> Left $ "Functions not implemented yet"
-                selectColumnNames -> forEach
+            [] -> do
+                let selectWithFuncs = [val | (Left val) <- selects]
+                let selectColumnNames = (map fst selectWithFuncs)
+                selectionOfColumns <- forEach
+                    (\x acc -> do
+                        trueAcc <- acc
+                        selection <- getSelectionOfColumns x
+                        Right $ selection:trueAcc)
+                    (reverse selectColumnNames)
+                    (Right [])
+                _ <- Left $ "For debugging purposes: " ++ (show $ zip selectionOfColumns (map snd selectWithFuncs))
+                Left $ "Function application not implemented yet"
+                where
+                    applyFuncs :: [[(((Maybe TableName, String), ColumnType), [Value])]]
+                        -> [Function]
+                        -> [[(((Maybe TableName, String), ColumnType), [Value])]]
+                    applyFuncs xs fs = forEach
+                        (\(x, f) acc -> case f of
+                            Func0 function0 -> (x:acc)
+                            Func1 function1 -> (x:acc))
+                        (reverse $ zip xs fs)
+                        ([])
+            selectColumnNames -> getSelectionOfColumns selectColumnNames
+            where
+                getSelectionOfColumns columnNames = forEach
                     (\selectTableColName acc -> case acc of
                         Left _ -> acc
                         Right trueAcc -> case filterAllBy
-                            (\(tableName, colName) -> case selectTableColName of
+                            (\((tableName, colName), _) -> case selectTableColName of
                                 (Nothing, selectColName) -> selectColName == colName
                                 (Just selectTableName, selectColName) -> selectTableName == tableName && selectColName == colName)
                             columnsWithValues of
-                            [] -> Left $ "Could not find column " ++ show selectTableColName ++ "in 'select'"
-                            match@(_, value):[] -> Right $ (selectTableColName, value):trueAcc
-                            match:matches -> Left $ "Matched column " ++ show selectTableColName ++ "more than once in 'select'")
-                    (reverse selectColumnNames)
+                            [] -> Left $ "Could not find column " ++ show selectTableColName ++ " in 'select'"
+                            match@((_, colType), value):[] -> Right $ ((selectTableColName, colType), value):trueAcc
+                            match:matches -> Left $ "Matched column " ++ show selectTableColName ++ " more than once in 'select'")
+                    (reverse columnNames)
                     (Right [])
 executeStatement (ShowTableStatement tableToShow') database' time = do
     case tableToShow' of
@@ -889,3 +912,4 @@ instance Eq WhereOperand where
 now' = now
 max' = Lib2.max
 sum' = Lib2.sum
+
