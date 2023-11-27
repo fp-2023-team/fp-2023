@@ -6,10 +6,8 @@
 module Lib3
     (
         executeSql,
-        convertDF,
         serialize,
         deserialize,
-        unconvertDF,
         Execution,
         ExecutionAlgebra(..),
         JSONserializable(..)
@@ -24,7 +22,7 @@ import GHC.Generics
 import Data.Aeson
 import Data.ByteString.Lazy.Char8 (pack, unpack)
 import Data.Char
-import Lib2 (executeStatement, ParsedStatement (SelectStatement, ShowTableStatement, InsertIntoStatement, DeleteStatement, UpdateStatement))
+import Lib2
 import Data.Either (Either(Right))
 
 type TableName = String
@@ -39,7 +37,7 @@ data ExecutionAlgebra next
     | SerializeTable DataFrame (TableContent -> next)
     | DeserializeTable TableContent (Maybe DataFrame -> next)
     | GetParsedStatement String (Either ErrorMessage ParsedStatement -> next)
-    | GetExecutionResult ParsedStatement [(TableName, DataFrame)] UTCTime (Either ErrorMessage DataFrame -> next)
+    | GetExecutionResult ParsedStatement [(TableName, DataFrame)] (Either ErrorMessage DataFrame -> next)
     -- feel free to add more constructors here
     deriving Functor
 
@@ -66,10 +64,9 @@ deserializeTable content = liftF $ DeserializeTable content id
 getParsedStatement :: String -> Execution (Either ErrorMessage ParsedStatement)
 getParsedStatement statement = liftF $ GetParsedStatement statement id
 
-getExecutionResult :: ParsedStatement -> [(TableName, DataFrame)] -> UTCTime -> Execution (Either ErrorMessage DataFrame)
-getExecutionResult statement database time = liftF $ GetExecutionResult statement database time id
+getExecutionResult :: ParsedStatement -> [(TableName, DataFrame)] -> Execution (Either ErrorMessage DataFrame)
+getExecutionResult statement database = liftF $ GetExecutionResult statement database id
 
--- We're using a temporary from memory database
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
   parsed <- getParsedStatement sql
@@ -79,7 +76,9 @@ executeSql sql = do
     Left e -> return $ Left e 
     Right parsedStmt -> case(database) of
       Left e -> return $ Left e
-      Right exist -> getExecutionResult parsedStmt exist time
+      Right exist -> case findNow parsedStmt of
+        False -> getExecutionResult parsedStmt exist
+        True -> getExecutionResult (changeNow parsedStmt) (timeTable time:exist)
   case (executionResult) of
     Left e -> return $ Left e
     Right result -> case (parsed) of
@@ -120,6 +119,27 @@ getTable name = do
   case (deserializedTable1) of
     Nothing -> return $ Left $ "Failed to deserialize table \"" ++ name ++ "\""
     Just a -> Pure $ Right (name, a)
+
+findNow :: ParsedStatement -> Bool
+findNow (SelectStatement a _ _) = findNow' a
+  where
+    findNow' :: [Either ([(Maybe String, String)], Lib2.Function) (Maybe String, String)] -> Bool
+    findNow' [] = False
+    findNow' (x:xs) = case x of
+      Left (_, Func0 _) -> True
+      _ -> findNow' xs
+findNow _ = False
+
+timeTable :: UTCTime -> (TableName, DataFrame)
+timeTable time = ("datetime", DataFrame [(Column "datetime" StringType)] [[StringValue $ show time]])
+
+changeNow :: ParsedStatement -> ParsedStatement
+changeNow (SelectStatement a b c) = (SelectStatement (map changeNow' a) ("datetime":b) c)
+  where
+    changeNow' :: Either ([(Maybe String, String)], Lib2.Function) (Maybe String, String) -> Either ([(Maybe String, String)], Lib2.Function) (Maybe String, String)
+    changeNow' (Left (_, Func0 _)) = Right (Just "datetime", "datetime")
+    changeNow' other = other
+changeNow notSelect = notSelect
   
 class JSONserializable a where
   serialize :: a -> String

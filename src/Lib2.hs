@@ -554,8 +554,8 @@ parseCompare (x:xs) (a:ab) = if (toLower(x) == toLower(a)) then parseCompare xs 
 parseCompare _ _ = False
 
 -- Executes a parsed statemet with the given database. Produces a DataFrame.
-executeStatement :: ParsedStatement -> [(TableName, DataFrame)] -> UTCTime -> Either ErrorMessage DataFrame
-executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' time = do
+executeStatement :: ParsedStatement -> [(TableName, DataFrame)] -> Either ErrorMessage DataFrame
+executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' = do
     _ <- guardCheck (null selectArgs')
         $ "Zero columns in 'select'"
     _ <- guardCheck (any (isLeft) selectArgs' && any (isRight) selectArgs')
@@ -694,7 +694,7 @@ executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' 
                             match:matches -> Left $ "Matched column " ++ show selectTableColName ++ " more than once in 'select'")
                     (reverse columnNames)
                     (Right [])
-executeStatement (ShowTableStatement tableToShow') database' time = do
+executeStatement (ShowTableStatement tableToShow') database' = do
     case tableToShow' of
         Nothing -> Right $ DataFrame
             [ Column "table_name" StringType ]
@@ -706,7 +706,7 @@ executeStatement (ShowTableStatement tableToShow') database' time = do
             Right $ DataFrame
                 [ Column "column_name" StringType, Column "column_type" StringType]
                 [ [StringValue name, StringValue $ show colType] | Column name colType <- cols ]
-executeStatement (UpdateStatement tableName' assignedValues' whereArgs') database' time = do
+executeStatement (UpdateStatement tableName' assignedValues' whereArgs') database'  = do
     table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
         (Right)
         (lookup tableName' database')
@@ -746,7 +746,7 @@ executeStatement (UpdateStatement tableName' assignedValues' whereArgs') databas
                         Just (StringValue val) -> val
                         _ -> ""
     --Left $ "Update statement unsupported"
-executeStatement (InsertIntoStatement tableName' valuesOrder' values') database' time = do
+executeStatement (InsertIntoStatement tableName' valuesOrder' values') database' = do
     table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
         (Right)
         (lookup tableName' database')
@@ -764,7 +764,7 @@ executeStatement (InsertIntoStatement tableName' valuesOrder' values') database'
     Right $ DataFrame
         cols
         (reverse (newRow:(reverse rows)))
-executeStatement (DeleteStatement tableName' whereArgs') database' time = do
+executeStatement (DeleteStatement tableName' whereArgs') database' = do
     table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
         (Right)
         (lookup tableName' database')
@@ -795,7 +795,7 @@ executeStatement (DeleteStatement tableName' whereArgs') database' time = do
                     Constant str -> str
                     ColumnName (_, str) -> case lookup str namedRows of
                         Just (StringValue val) -> val
-executeStatement _ _ _ = Left $ "Unknown unsupported statement"
+executeStatement _ _ = Left $ "Unknown unsupported statement"
 
 nullOrAny :: (Foldable t) => (a -> Bool) -> t a -> Bool
 nullOrAny f x = null x || any f x
