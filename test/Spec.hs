@@ -675,7 +675,7 @@ runExecuteIO memoryDB (Free step) = do
         runStep (Lib3.SerializeTable dataframe next) = pure (Lib3.serialize dataframe) >>= return . next
         runStep (Lib3.DeserializeTable tableContent next) = pure (Lib3.deserialize tableContent) >>= return . next
         runStep (Lib3.GetParsedStatement statement next) = pure (Lib2.parseStatement statement) >>= return . next
-        runStep (Lib3.GetExecutionResult statement database time next) = pure (Lib2.executeStatement statement database time) >>= return . next
+        runStep (Lib3.GetExecutionResult statement database next) = pure (Lib2.executeStatement statement database) >>= return . next
 
 getTableFromDB :: MemoryDatabase -> String -> IO (Maybe DataFrame)
 getTableFromDB ref name = do 

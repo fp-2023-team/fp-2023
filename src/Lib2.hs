@@ -558,7 +558,7 @@ executeStatement :: ParsedStatement -> [(TableName, DataFrame)] -> Either ErrorM
 executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' = do
     _ <- guardCheck (null selectArgs')
         $ "Zero columns in 'select'"
-    _ <- guardCheck (any (isLeft) selectArgs' && any (isRight) selectArgs')
+    _ <- guardCheck (any (isLeft) selectArgs' && anyRight selectArgs')
         $ "Cannot use both functions and select columns in 'select'"
     usedTables <- getUsedTables tableNames' database'
     _ <- guardCheck (null usedTables)
@@ -863,7 +863,12 @@ forEach :: (a -> b -> b) -> [a] -> b -> b
 forEach func (x:xs) acc = forEach func xs (func x acc)
 forEach _ [] acc = acc
 
-
+anyRight :: [Either ([(Maybe String, String)], Function) (Maybe String, String)] -> Bool
+anyRight [] = False
+anyRight (x:xs) = case x of
+  Right (Just "datetime", "datetime") -> anyRight xs
+  Right _ -> True
+  Left _ -> anyRight xs
 
 
 ------------ For testing ------------
