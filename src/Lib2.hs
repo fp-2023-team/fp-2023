@@ -188,12 +188,12 @@ parseSelect x = do
                   then parseFuncArgs bracketStuff "empty"
                   else parseFuncArgs bracketStuff "arg"
         fullNames <- parseAllFullCollumnNames args
-        result <- if ((getTermination rem) == ' ' && (head rem) == ' ') then 
+        result <- if ((getTermination rem) == ' ' && (head' rem) == ' ') then 
                       Right (rem, SelectStatement { selectArgs = [Left (fullNames, func)]})
                   else if((getTermination rem) == ',') then case (parseSelectArgs (trpl3 (parseWord rem))) of
                       Left e -> Left e
                       Right (parseRem, parseRes) -> Right (parseRem, SelectStatement { selectArgs = (Left (fullNames, func)) : (selectArgs parseRes)})
-                  else Left $ "Unexpected " ++ [getTermination rem] ++ " after (" ++ (head args) ++ ")"
+                  else Left $ "Unexpected " ++ [getTermination rem] ++ " after (" ++ (head' args) ++ ")"
         return (result)
 
     parseFromArgs :: (String, ParsedStatement) -> Either ErrorMessage (String, ParsedStatement)
@@ -870,6 +870,16 @@ anyRight (x:xs) = case x of
   Right _ -> True
   Left _ -> anyRight xs
 
+class NewHead a where
+  head' :: [a] -> a
+
+instance NewHead Char where
+  head' [] = toEnum 0
+  head' (x:xs) = x
+
+instance NewHead String where
+  head' [] = ""
+  head' (x:xs) = x
 
 ------------ For testing ------------
 

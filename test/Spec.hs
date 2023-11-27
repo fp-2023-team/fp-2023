@@ -374,14 +374,13 @@ main = hspec $ do
         selectArgs = [Left ([(Just "employees", "age")], Func1 Lib2.max'), Left ([(Just "jobs", "id")], Func1 Lib2.sum')],
         fromArgs = ["employees", "jobs"],
         whereArgs = []})
--- Not supported
---    it "parses select with NOW() function" $ do
---      Lib2.parseStatement "SELECT NOW();" 
---      `shouldBe` 
---      Right (SelectStatement {
---        selectArgs = [Left ([], Func0 Lib2.now')],
---        fromArgs = [],
---        whereArgs = []})
+    it "parses select with NOW() function" $ do
+      Lib2.parseStatement "SELECT NOW();" 
+      `shouldBe` 
+      Right (SelectStatement {
+        selectArgs = [Left ([], Func0 Lib2.now')],
+        fromArgs = [],
+        whereArgs = []})
     it "parses select with NOW() function and other mixed columns" $ do
       Lib2.parseStatement "SELECT NOW(), employees.name, jobs.title FROM employees, jobs;"
       `shouldBe`
@@ -523,9 +522,6 @@ main = hspec $ do
       Lib2.parseStatement "INSERT INTO employees (name, jobTitle) VALUES;"
       `shouldSatisfy`
       isLeft
-
-
-
     it "parses delete with string constant in where" $ do
       Lib2.parseStatement "DELETE FROM employees WHERE name = 'Employee Name';"
       `shouldBe`
@@ -602,12 +598,14 @@ main = hspec $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs WHERE id = employeeId;")
       df `shouldBe` Right (DataFrame [Column "name" StringType,Column "title" StringType] [[StringValue "Vi",StringValue "Lecturer"], [StringValue "Ed",StringValue "Assistant"]])
+    it "executes select with NOW() function" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT NOW();")
+      df `shouldBe` Right (DataFrame [Column "datetime.datetime" StringType] [[StringValue "1984-11-28 00:00:00 UTC", StringValue "Vi",StringValue "Assistant"],[StringValue "1984-11-28 00:00:00 UTC", StringValue "Vi",StringValue "Lecturer"],[StringValue "1984-11-28 00:00:00 UTC", StringValue "Ed",StringValue "Assistant"],[StringValue "1984-11-28 00:00:00 UTC", StringValue "Ed",StringValue "Lecturer"]])
     it "executes select with NOW() function and other mixed columns" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "SELECT NOW(), employees.name, jobs.title FROM employees, jobs;")
-      df `shouldBe` Right (DataFrame [Column "now" StringType, Column "employees.name" StringType, Column "jobs.title" StringType] [[StringValue "1984 something something", StringValue "Vi",StringValue "Assistant"],[StringValue "1984 something something", StringValue "Vi",StringValue "Lecturer"],[StringValue "1984 something something", StringValue "Ed",StringValue "Assistant"],[StringValue "1984 something something", StringValue "Ed",StringValue "Lecturer"]])
-
-
+      df `shouldBe` Right (DataFrame [Column "datetime.datetime" StringType, Column "employees.name" StringType, Column "jobs.title" StringType] [[StringValue "1984-11-28 00:00:00 UTC", StringValue "Vi",StringValue "Assistant"],[StringValue "1984-11-28 00:00:00 UTC", StringValue "Vi",StringValue "Lecturer"],[StringValue "1984-11-28 00:00:00 UTC", StringValue "Ed",StringValue "Assistant"],[StringValue "1984-11-28 00:00:00 UTC", StringValue "Ed",StringValue "Lecturer"]])
     it "executes update with string constant in where" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "UPDATE employees SET id = 42, name = 'New Vi' WHERE name = 'Vi';")
@@ -696,15 +694,19 @@ whereEq _ _ = True
 
 
 testRes1 :: DataFrame
-testRes1 = DataFrame
-  [Column "table_name" StringType]
-  [ 
-    [StringValue "employees"],
-    [StringValue "invalid1"],
-    [StringValue "invalid2"],
-    [StringValue "long_strings"],
-    [StringValue "flags"],
-    [StringValue "duplicates"]
+testRes1 = DataFrame 
+  [Column "table_name" StringType] 
+  [
+    [StringValue "employees"], 
+    [StringValue "invalid1"], 
+    [StringValue "invalid2"], 
+    [StringValue "long_strings"], 
+    [StringValue "flags"], 
+    [StringValue "duplicates"], 
+    [StringValue "noRows"], 
+    [StringValue "cartProdTestOne"], 
+    [StringValue "cartProdTestTwo"], 
+    [StringValue "jobs"]
   ]
 
 testRes2 :: DataFrame
