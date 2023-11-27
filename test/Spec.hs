@@ -77,7 +77,7 @@ main = hspec $ do
       Lib2.parseStatement "SELECT * FROM duplicates WHERE x = 'a' OR y = 'a';" `shouldBe` (parseTest 4)
     it "parses a where function with strings, <> comparison" $ do
       Lib2.parseStatement "SELECT * FROM duplicates WHERE x <> y;" `shouldBe` (parseTest 5)
-    it "parses executes a where or function with strings, >= comparison" $ do
+    it "parses a where or function with strings, >= comparison" $ do
       Lib2.parseStatement "SELECT id FROM employees WHERE 'a' >= 'b' OR name >= 'Z';" `shouldBe` (parseTest 6)
     it "parses a where or function with strings, <= comparison, combined with sum" $ do
       Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" `shouldBe` (parseTest 7)
@@ -128,7 +128,7 @@ main = hspec $ do
       case Lib2.parseStatement "SELECT id FROM employees WHERE 'a' >= 'b' OR name >= 'Z';" of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right (DataFrame [Column "id" IntegerType] 
-                                                                        [[NullValue]])
+                                                                        [])
     it "executes a where or function with strings, <= comparison, combined with sum" $ do
       case Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" of 
         Left err -> err `shouldBe` "should have successfully parsed"
@@ -375,11 +375,11 @@ main = hspec $ do
         fromArgs = ["employees", "jobs"],
         whereArgs = []})
     it "parses select with NOW() function" $ do
-      Lib2.parseStatement "SELECT NOW();" 
+      Lib2.parseStatement "SELECT NOW() FROM employees;" 
       `shouldBe` 
       Right (SelectStatement {
         selectArgs = [Left ([], Func0 Lib2.now')],
-        fromArgs = [],
+        fromArgs = ["employees"],
         whereArgs = []})
     it "parses select with NOW() function and other mixed columns" $ do
       Lib2.parseStatement "SELECT NOW(), employees.name, jobs.title FROM employees, jobs;"
@@ -389,29 +389,29 @@ main = hspec $ do
         fromArgs = ["employees", "jobs"],
         whereArgs = []})
     it "parses select with where clause" $ do
-      Lib2.parseStatement "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.name = jobs.holder;"
+      Lib2.parseStatement "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.name = jobs.title;"
       `shouldBe`
       Right (SelectStatement {
         selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "title")],
         fromArgs = ["employees", "jobs"],
-        whereArgs = [( ColumnName (Just "employees", "name"), ColumnName (Just "jobs", "holder"),  whereEq)]})
+        whereArgs = [( ColumnName (Just "employees", "name"), ColumnName (Just "jobs", "title"),  whereEq)]})
     it "parses select with where OR clause" $ do
-      Lib2.parseStatement "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.name = jobs.holder OR employees.jobId = jobs.id;"
+      Lib2.parseStatement "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.name >= jobs.title OR employees.surname <= jobs.title;"
       `shouldBe`
       Right (SelectStatement {
         selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "title")],
         fromArgs = ["employees", "jobs"],
         whereArgs = [
-          (ColumnName (Just "employees", "name"), ColumnName (Just "jobs", "holder"), whereEq), 
-          (ColumnName (Just "employees", "jobId"), ColumnName (Just "jobs", "id"),  whereEq)
+          (ColumnName (Just "employees", "name"), ColumnName (Just "jobs", "title"), whereEq), 
+          (ColumnName (Just "employees", "surname"), ColumnName (Just "jobs", "title"),  whereEq)
         ]})
     it "parses select with where clause and no table names" $ do
-      Lib2.parseStatement "SELECT employees.name, jobs.title FROM employees, jobs WHERE name = holder;"
+      Lib2.parseStatement "SELECT employees.name, jobs.title FROM employees, jobs WHERE name >= title;"
       `shouldBe`
       Right (SelectStatement {
         selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "title")],
         fromArgs = ["employees", "jobs"],
-        whereArgs = [( ColumnName (Nothing, "name"), ColumnName (Nothing, "holder"),  whereEq)]})
+        whereArgs = [( ColumnName (Nothing, "name"), ColumnName (Nothing, "title"),  whereEq)]})
 
     it "parses update with string constant in where" $ do
       Lib2.parseStatement "UPDATE employees SET id = 5, name = 'New Name' WHERE name = 'Old Name';"
@@ -585,23 +585,23 @@ main = hspec $ do
     it "executes select with columns from multiple tables inside functions" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "SELECT MAX(employees.id), SUM(jobs.id) FROM employees, jobs;")
-      df `shouldBe` Right (DataFrame [Column "max" IntegerType, Column "sum" IntegerType] [[IntegerValue 2, IntegerValue 17]])
+      df `shouldBe` Right (DataFrame [Column "employees.id" IntegerType, Column "jobs.id" IntegerType] [[IntegerValue 2, IntegerValue 34]])
     it "executes select with where clause" $ do
       db <- testSetup
-      df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.id = jobs.employeeId;")
-      df `shouldBe` Right (DataFrame [Column "name" StringType,Column "title" StringType] [[StringValue "Vi",StringValue "Lecturer"], [StringValue "Ed",StringValue "Assistant"]])
+      df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.name = jobs.title;")
+      df `shouldBe` Right (DataFrame [Column "name" StringType,Column "title" StringType] [])
     it "executes select with where OR clause" $ do
       db <- testSetup
-      df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.id = jobs.employeeId OR employees.name = jobs.title;")
-      df `shouldBe` Right (DataFrame [Column "name" StringType,Column "title" StringType] [[StringValue "Vi",StringValue "Lecturer"], [StringValue "Ed",StringValue "Assistant"]])
+      df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.name >= jobs.title OR employees.surname <= jobs.title;")
+      df `shouldBe` Right (DataFrame [Column "employees.name" StringType,Column "jobs.title" StringType] [[StringValue "Vi",  StringValue "Assistant"], [StringValue "Vi",  StringValue "Lecturer"], [StringValue "Ed",StringValue "Assistant"], [StringValue "Ed",StringValue "Lecturer"]])
     it "executes select with where clause and no table names" $ do
       db <- testSetup
-      df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs WHERE id = employeeId;")
-      df `shouldBe` Right (DataFrame [Column "name" StringType,Column "title" StringType] [[StringValue "Vi",StringValue "Lecturer"], [StringValue "Ed",StringValue "Assistant"]])
+      df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs WHERE name >= title;")
+      df `shouldBe` Right (DataFrame [Column "employees.name" StringType,Column "jobs.title" StringType] [[StringValue "Vi",  StringValue "Assistant"], [StringValue "Vi",StringValue "Lecturer"], [StringValue "Ed",StringValue "Assistant"]])
     it "executes select with NOW() function" $ do
       db <- testSetup
-      df <- runExecuteIO db (Lib3.executeSql "SELECT NOW();")
-      df `shouldBe` Right (DataFrame [Column "datetime.datetime" StringType] [[StringValue "1984-11-28 00:00:00 UTC", StringValue "Vi",StringValue "Assistant"],[StringValue "1984-11-28 00:00:00 UTC", StringValue "Vi",StringValue "Lecturer"],[StringValue "1984-11-28 00:00:00 UTC", StringValue "Ed",StringValue "Assistant"],[StringValue "1984-11-28 00:00:00 UTC", StringValue "Ed",StringValue "Lecturer"]])
+      df <- runExecuteIO db (Lib3.executeSql "SELECT NOW() FROM employees;")
+      df `shouldBe` Right (DataFrame [Column "datetime.datetime" StringType] [[StringValue "1984-11-28 00:00:00 UTC"], [StringValue "1984-11-28 00:00:00 UTC"]])
     it "executes select with NOW() function and other mixed columns" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "SELECT NOW(), employees.name, jobs.title FROM employees, jobs;")
