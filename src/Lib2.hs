@@ -761,7 +761,7 @@ executeStatement (DeleteStatement tableName' whereArgs') database' time = do
         whereColNames = [colName | ((ColumnName (_, colName)), _, _) <- whereArgs']
             ++ [colName | (_, (ColumnName (_, colName)), _) <- whereArgs']
         executeWhere :: [(String, Value)] -> [(WhereOperand, WhereOperand, WhereOperator)] -> Bool
-        executeWhere namedRows whereOperations = any (\(lVal, rVal, op) -> do
+        executeWhere namedRows whereOperations = nullOrAny (\(lVal, rVal, op) -> do
             let lVal' = getValue lVal
             let rVal' = getValue rVal
             op lVal' rVal')
