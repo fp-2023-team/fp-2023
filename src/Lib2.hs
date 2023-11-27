@@ -667,18 +667,13 @@ executeStatement (SelectStatement selectArgs' tableNames' whereArgs') database' 
                         Right $ selection:trueAcc)
                     (reverse selectColumnNames)
                     (Right [])
-                _ <- Left $ "For debugging purposes: " ++ (show $ zip selectionOfColumns (map snd selectWithFuncs))
-                Left $ "Function application not implemented yet"
-                where
-                    applyFuncs :: [[(((Maybe TableName, String), ColumnType), [Value])]]
-                        -> [Function]
-                        -> [[(((Maybe TableName, String), ColumnType), [Value])]]
-                    applyFuncs xs fs = forEach
-                        (\(x, f) acc -> case f of
-                            Func0 function0 -> (x:acc)
-                            Func1 function1 -> (x:acc))
-                        (reverse $ zip xs fs)
-                        ([])
+                funcAppliedColumns <- Right $ forEach
+                    (\((colInfo, values):_, f) acc -> case f of
+                        Func0 f0 -> ([(((Nothing, "CurrentTime"), StringType), [StringValue f0])]:acc)
+                        Func1 f1 -> [(colInfo, [f1 values])]:acc)
+                    (reverse $ zip selectionOfColumns $ map snd selectWithFuncs)
+                    ([])
+                Right $ decomposeListList funcAppliedColumns
             selectColumnNames -> getSelectionOfColumns selectColumnNames
             where
                 getSelectionOfColumns columnNames = forEach
