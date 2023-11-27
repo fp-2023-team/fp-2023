@@ -18,8 +18,6 @@ import InMemoryTables (TableName)
 
 type ErrorMessage = String
 
-type Database = [(TableName, DataFrame)]
-
 -- Your code modifications go below this comment
 
 toLower :: Char -> Char
@@ -33,7 +31,7 @@ toLowerStr str = [toLower ch | ch <- str]
 -- 1) implement the function which returns a data frame by its name
 -- in provided Database list
 -- Credit: Almantas Mecele
-findTableByName :: Database -> String -> Maybe DataFrame
+findTableByName :: [(TableName, DataFrame)] -> String -> Maybe DataFrame
 findTableByName database tableName = lookup tableName database
 
 -- 2) implement the function which parses a "select * from ..."

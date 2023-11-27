@@ -42,8 +42,11 @@ library
       ImportQualifiedPost
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
-      base >=4.7 && <5
+      aeson
+    , base >=4.7 && <5
+    , bytestring
     , free
+    , json
     , time
     , transformers
   default-language: Haskell2010
@@ -58,10 +61,13 @@ executable fp2023-manipulate
       ImportQualifiedPost
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      base >=4.7 && <5
+      aeson
+    , base >=4.7 && <5
+    , bytestring
     , extra
     , fp2023
     , free
+    , json
     , repline
     , terminal-size
     , time
@@ -114,5 +120,8 @@ test-suite fp2023-test
   build-depends:
       base >=4.7 && <5
     , fp2023
+    , free
     , hspec
+    , raw-strings-qq
+    , time
   default-language: Haskell2010

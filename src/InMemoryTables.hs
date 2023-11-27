@@ -23,6 +23,16 @@ tableEmployees =
       ]
   )
 
+tableJobs :: (TableName, DataFrame)
+tableJobs =
+  ( "jobs",
+    DataFrame
+      [Column "id" IntegerType, Column "title" StringType, Column "employeeId" IntegerType]
+      [ [IntegerValue 8, StringValue "Assistant", IntegerValue 2],
+        [IntegerValue 9, StringValue "Lecturer", IntegerValue 1]
+      ]
+  )
+
 tableInvalid1 :: (TableName, DataFrame)
 tableInvalid1 =
   ( "invalid1",
@@ -92,6 +102,37 @@ tableWithDuplicateColumns = (
         ]
     )
 
+cartesianProductTestOne :: (TableName, DataFrame)
+cartesianProductTestOne = (
+    "cartProdTestOne",
+    DataFrame
+        [Column "a" StringType, Column "b" StringType]
+        [
+            [StringValue "a", StringValue "a"],
+            [StringValue "a", StringValue "b"]
+        ]
+    )
+
+cartesianProductTestTwo :: (TableName, DataFrame)
+cartesianProductTestTwo = (
+    "cartProdTestTwo",
+    DataFrame
+        [Column "a" StringType, Column "b" StringType]
+        [
+            [StringValue "x", StringValue "x"],
+            [StringValue "x", StringValue "y"]
+        ]
+    )
+
+tableNoRows :: (TableName, DataFrame)
+tableNoRows = (
+    "noRows",
+    DataFrame
+        [Column "x" StringType, Column "y" StringType]
+        []
+    )
+
 database :: [(TableName, DataFrame)]
 database = [tableEmployees, tableInvalid1, tableInvalid2,
-        tableLongStrings, tableWithNulls, tableWithDuplicateColumns]
+        tableLongStrings, tableWithNulls, tableWithDuplicateColumns,
+        tableNoRows, cartesianProductTestOne, cartesianProductTestTwo, tableJobs]
