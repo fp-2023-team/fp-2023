@@ -84,14 +84,14 @@ executeSql sql = do
     Right result -> case (parsed) of
       Right (SelectStatement _ _ _) -> return $ Right result
       Right (ShowTableStatement _) -> return $ Right result
-      Right (InsertIntoStatement _ _ _) -> do
-        persistTable "employees" result
+      Right (InsertIntoStatement tablename _ _) -> do 
+        persistTable tablename result
         return $ Right result
-      Right (UpdateStatement _ _ _) -> do
-        persistTable "employees" result
+      Right (UpdateStatement tablename _ _) -> do
+        persistTable tablename result
         return $ Right result
-      Right (DeleteStatement _ _) -> do
-        persistTable "employees" result
+      Right (DeleteStatement tablename _) -> do
+        persistTable tablename result
         return $ Right result
 
 getRelevantTables :: [TableName] -> Execution (Either ErrorMessage [(TableName, DataFrame)])
