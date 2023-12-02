@@ -24,6 +24,7 @@ import Data.ByteString.Lazy.Char8 (pack, unpack)
 import Data.Char
 import Lib2
 import Data.Either (Either(Right))
+import Lib2 (executeStatement)
 
 type TableName = String
 type TableContent = String
@@ -33,11 +34,6 @@ data ExecutionAlgebra next
     = GetTime (UTCTime -> next)
     | SaveTable TableName TableContent (() -> next)
     | LoadTable TableName (TableContent -> next)
-    | LoadDatabase ([(TableName, DataFrame)] -> next)
-    | SerializeTable DataFrame (TableContent -> next)
-    | DeserializeTable TableContent (Maybe DataFrame -> next)
-    | GetParsedStatement String (Either ErrorMessage ParsedStatement -> next)
-    | GetExecutionResult ParsedStatement [(TableName, DataFrame)] (Either ErrorMessage DataFrame -> next)
     -- feel free to add more constructors here
     deriving Functor
 
@@ -52,24 +48,9 @@ saveTable name content = liftF $ SaveTable name content id
 loadTable :: TableName -> Execution TableContent
 loadTable name = liftF $ LoadTable name id
 
-loadDatabase :: Execution [(TableName, DataFrame)]
-loadDatabase = liftF $ LoadDatabase id
-
-serializeTable :: DataFrame -> Execution TableContent
-serializeTable frame = liftF $ SerializeTable frame id
-
-deserializeTable :: TableContent -> Execution (Maybe DataFrame)
-deserializeTable content = liftF $ DeserializeTable content id
-
-getParsedStatement :: String -> Execution (Either ErrorMessage ParsedStatement)
-getParsedStatement statement = liftF $ GetParsedStatement statement id
-
-getExecutionResult :: ParsedStatement -> [(TableName, DataFrame)] -> Execution (Either ErrorMessage DataFrame)
-getExecutionResult statement database = liftF $ GetExecutionResult statement database id
-
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
-  parsed <- getParsedStatement sql
+  parsed <- Pure $ parseStatement sql
   database <- getRelevantTables ["duplicates", "employees", "flags", "invalid1", "invalid2", "long_strings", "jobs"]
   time <- getTime
   executionResult <- case(parsed) of
@@ -77,8 +58,8 @@ executeSql sql = do
     Right parsedStmt -> case(database) of
       Left e -> return $ Left e
       Right exist -> case findNow parsedStmt of
-        False -> getExecutionResult parsedStmt exist
-        True -> getExecutionResult (changeNow parsedStmt) (timeTable time:exist)
+        False -> Pure $ executeStatement parsedStmt exist
+        True -> Pure $ executeStatement (changeNow parsedStmt) (timeTable time:exist)
   case (executionResult) of
     Left e -> return $ Left e
     Right result -> case (parsed) of
@@ -109,13 +90,13 @@ getRelevantTables (x:xs) = do
 
 persistTable :: TableName -> DataFrame -> Execution ()
 persistTable name duom = do
-  serial <- serializeTable duom
+  serial <- Pure $ serialize duom
   saveTable name serial
 
 getTable :: TableName -> Execution (Either ErrorMessage (TableName, DataFrame))
 getTable name = do
   table <- loadTable name
-  deserializedTable1 <- deserializeTable (table) 
+  deserializedTable1 <- Pure $ deserialize table 
   case (deserializedTable1) of
     Nothing -> return $ Left $ "Failed to deserialize table \"" ++ name ++ "\""
     Just a -> Pure $ Right (name, a)
