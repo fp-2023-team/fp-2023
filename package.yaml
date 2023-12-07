@@ -88,6 +88,25 @@ executables:
       - aeson
       - bytestring
       - json
+  fp2023-server:
+    main: Main.hs
+    source-dirs: app4server
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+    dependencies:
+      - fp2023
+      - extra
+      - repline
+      - terminal-size
+      - free
+      - time
+      - aeson
+      - bytestring
+      - json
+      - happstack-server
+      - yaml
 
 tests:
   fp2023-test:
