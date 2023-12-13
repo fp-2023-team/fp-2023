@@ -24,8 +24,6 @@ import DataFrame
 
 import qualified Data.Yaml as Yaml
 
-modifyTVarIO a f = atomically (modifyTVar a f)
-
 save :: TVar [(String, String)] -> STM ()
 save state = do
     curState <- readTVar state
@@ -40,8 +38,8 @@ saveLoop state = do
     saveLoop state
 
 loadTablesFromDirectory :: FilePath -> IO [(String, String)]
-loadTablesFromDirectory path = do
-    fileNames <- listDirectory path
+loadTablesFromDirectory dirPath = do
+    fileNames <- listDirectory dirPath
     loadedTables <- loadTablesFromList fileNames (return [])
     --putStrLn $ show $ fileNames
     return $ loadedTables
@@ -49,7 +47,7 @@ loadTablesFromDirectory path = do
         loadTablesFromList :: [FilePath] -> IO [(String, String)] -> IO [(String, String)]
         loadTablesFromList [] acc = acc
         loadTablesFromList (fileName:fileNames) acc = do
-            fileContents <- readFile $ path ++ "/" ++ fileName
+            fileContents <- readFile $ dirPath ++ "/" ++ fileName
             let _:_:_:_:_:reversedTableName = reverse fileName
             let tableName = reverse reversedTableName
             loadTablesFromList fileNames (fmap ((:) (tableName, fileContents)) acc)
@@ -70,14 +68,22 @@ handleRequest state = do
             where
                 runStep :: Lib3.ExecutionAlgebra a -> IO a
                 runStep (Lib3.GetTime next) = getCurrentTime >>= return . next
-                runStep (Lib3.SaveTable name content next) = modifyState >>= return . next
+                runStep (Lib3.SaveTable name content next) = (atomically $ updateState state (name, content))
+                    >>= return . next
                     where
-                        modifyState = modifyTVarIO state ((:) (name, content))
-                runStep (Lib3.LoadTable name next) = fmappedResult >>= return . next
+                        updateState :: TVar [(String, b)] -> (String, b) -> STM ()
+                        updateState state' newValue@(newName, _) = do
+                            curState <- readTVar state'
+                            writeTVar state'
+                                $ newValue:[value | value@(name', _) <- curState, name' /= newName]
+                runStep (Lib3.LoadTable name next) = (atomically $ lookupState state name) >>= return . next
                     where
-                        fmapLookup = fmap (lookup name)
-                        fmapMaybe = fmap (maybe (error $ "Could not find table " ++ name) (id))
-                        fmappedResult = fmapMaybe $ fmapLookup $ readTVarIO state
+                        lookupState :: TVar [(String, b)] -> String -> STM b
+                        lookupState state' needle = do
+                            curState <- readTVar state'
+                            case lookup needle curState of
+                                Nothing -> error $ "Could not find table " ++ name
+                                Just x -> return x
 
 main :: IO ()
 main = do
