@@ -10,7 +10,8 @@ module Lib3
         deserialize,
         Execution,
         ExecutionAlgebra(..),
-        JSONserializable(..)
+        JSONserializable(..),
+        convertDF
     )
 where
 

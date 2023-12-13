@@ -107,6 +107,9 @@ executables:
       - json
       - happstack-server
       - yaml
+      - stm
+      - async
+      - directory
 
 tests:
   fp2023-test:
