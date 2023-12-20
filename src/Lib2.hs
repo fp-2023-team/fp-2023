@@ -132,16 +132,14 @@ moreOrEqual = (>=)
 
 -- Parses user input into an entity representing a parsed
 -- statement
-parseStatement :: String -> Either ErrorMessage ParsedStatement
+parseStatement :: String -> EitherT ErrorMessage (State String) ParsedStatement
 parseStatement a = do
-  result <- runEitherT $ parseStatement' $ normaliseString $ parseEndSemicolon a
-  case (result) of
-    Left err -> Left err
-    Right val -> Right val
+  lift $ put $ normaliseString $ parseEndSemicolon a
+  parseStatement' 
   where 
-    parseStatement' :: String -> EitherT ErrorMessage (State String) ParsedStatement
-    parseStatement' input = do
-      lift $ put input
+    parseStatement' :: EitherT ErrorMessage (State String) ParsedStatement
+    parseStatement' = do
+      input <- lift $ get
       case (input) of
         [] -> throwE "No statement found" 
         stmt -> do

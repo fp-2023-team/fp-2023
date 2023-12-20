@@ -26,6 +26,7 @@ import Data.Char
 import Lib2
 import Data.Either (Either(Right))
 import EitherT
+import Control.Monad.Trans.State.Strict
 
 type TableName = String
 type TableContent = String
@@ -50,11 +51,15 @@ loadTable name = liftF $ LoadTable name id
 
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
-  parsed <- parseStatement sql
+  parsed <- Pure $ parseStatement sql
+  fixedParsed <- 
+    let eitherRes = runState (runEitherT parsed) ""
+    in case (eitherRes) of
+      (Left err, _) -> Pure $ Left err
+      (Right value, _) -> Pure $ Right value
   database <- getRelevantTables ["duplicates", "employees", "flags", "invalid1", "invalid2", "long_strings", "jobs"]
   time <- getTime
-  --eitheredParsed <- runEitherT parsed
-  executionResult <- case(parsed) of
+  executionResult <- case(fixedParsed) of
     Left e -> return $ Left e 
     Right parsedStmt -> case(database) of
       Left e -> return $ Left e
@@ -63,7 +68,7 @@ executeSql sql = do
         True -> Pure $ executeStatement (changeNow parsedStmt) (timeTable time:exist)
   case (executionResult) of
     Left e -> return $ Left e
-    Right result -> case (parsed) of
+    Right result -> case (fixedParsed) of
       Right (SelectStatement _ _ _) -> return $ Right result
       Right (ShowTableStatement _) -> return $ Right result
       Right (InsertIntoStatement tablename _ _) -> do 

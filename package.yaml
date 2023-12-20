@@ -88,6 +88,12 @@ executables:
       - aeson
       - bytestring
       - json
+      - happstack-server
+      - yaml
+      - stm
+      - async
+      - directory
+      - transformers
   fp2023-server:
     main: Main.hs
     source-dirs: app4server
@@ -110,6 +116,7 @@ executables:
       - stm
       - async
       - directory
+      - transformers
 
 tests:
   fp2023-test:
