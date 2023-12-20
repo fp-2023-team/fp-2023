@@ -90,9 +90,11 @@ handleRequest state = do
 
 main :: IO ()
 main = do
-    database <- loadTablesFromDirectory "./db"
+    putStrLn $ "Starting SQL server..."
+    database <- loadTablesFromDirectory "./db/"
     state <- newTVarIO database
     withAsync (saveLoop state) $ \asyncSave -> do
         link asyncSave
+        putStrLn $ "SQL server started"
         simpleHTTP nullConf $ handleRequest state
 
