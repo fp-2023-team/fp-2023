@@ -25,11 +25,10 @@ import Data.ByteString.Lazy.Char8 (pack, unpack)
 import Data.Char
 import Lib2
 import Data.Either (Either(Right))
-import Lib2 (executeStatement)
+import EitherT
 
 type TableName = String
 type TableContent = String
-type ErrorMessage = String
 
 data ExecutionAlgebra next
     = GetTime (UTCTime -> next)
@@ -51,9 +50,10 @@ loadTable name = liftF $ LoadTable name id
 
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
-  parsed <- Pure $ parseStatement sql
+  parsed <- parseStatement sql
   database <- getRelevantTables ["duplicates", "employees", "flags", "invalid1", "invalid2", "long_strings", "jobs"]
   time <- getTime
+  --eitheredParsed <- runEitherT parsed
   executionResult <- case(parsed) of
     Left e -> return $ Left e 
     Right parsedStmt -> case(database) of
