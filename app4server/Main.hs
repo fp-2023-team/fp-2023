@@ -4,6 +4,8 @@ import Control.Concurrent
 import Control.Concurrent.Async
 import Control.Concurrent.STM.TVar
 
+import Control.Exception
+
 import Control.Monad.STM
 import Control.Monad.Free
 import Control.Monad.Trans.Class
@@ -24,18 +26,19 @@ import DataFrame
 
 import qualified Data.Yaml as Yaml
 
-save :: TVar [(String, String)] -> STM ()
-save state = do
-    curState <- readTVar state
-    return ()
-
 saveLoop :: TVar [(String, String)] -> IO ()
 saveLoop state = do
-    threadDelay $ 1000 * 1000
-    atomically $ save state
+    threadDelay $ 5 * 1000 * 1000
     curState <- readTVarIO state
-    --putStrLn $ show curState
+    seq (save curState) (return ())
     saveLoop state
+    where
+        save :: [(String, String)] -> IO ()
+        save [] = return ()
+        save ((name, content):xs) = do
+            catch (writeFile ("./db/" ++ name ++ ".json") content)
+                ((\ex -> putStrLn $ "Caught error: " ++ show ex) :: SomeException -> IO ())
+            save xs
 
 loadTablesFromDirectory :: FilePath -> IO [(String, String)]
 loadTablesFromDirectory dirPath = do
