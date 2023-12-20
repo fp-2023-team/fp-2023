@@ -110,6 +110,7 @@ executables:
       - stm
       - async
       - directory
+      - transformers
 
 tests:
   fp2023-test:

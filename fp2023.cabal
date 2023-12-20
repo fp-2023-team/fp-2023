@@ -131,6 +131,7 @@ executable fp2023-server
     , stm
     , terminal-size
     , time
+    , transformers
     , yaml
   default-language: Haskell2010
 
