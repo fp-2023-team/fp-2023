@@ -282,6 +282,7 @@ parseWhereArgs = do
                       | otherwise -> throwE $ "Unexpected \' after " ++ x  
         (x, sym, xs) ->  do
                           fullName <- addTtoEither $ parseFullCollumnName x 
+                          lift $ put xs
                           parseOperator (ColumnName fullName, sym)
       return res
         where
