@@ -59,7 +59,7 @@ handleRequest state = do
     statementStr <- look "statement"
     executionResult <- lift $ runExecuteIO $ Lib3.executeSql statementStr
     case executionResult of
-        Left err -> badRequest $ "Error: " ++ err
+        Left err -> badRequest err
         Right dataframe -> ok $ ByteString.Internal.unpackChars $ Yaml.encode $ convertDF dataframe
     where
         runExecuteIO :: Lib3.Execution r -> IO r

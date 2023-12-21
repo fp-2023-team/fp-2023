@@ -35,7 +35,6 @@ library
       Lib1
       Lib2
       Lib3
-      Lib4
   other-modules:
       Paths_fp2023
   hs-source-dirs:
