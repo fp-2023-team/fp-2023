@@ -11,7 +11,8 @@ module Lib3
         Execution,
         ExecutionAlgebra(..),
         JSONserializable(..),
-        convertDF
+        convertDF,
+        unconvertDF
     )
 where
 
