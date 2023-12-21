@@ -34,6 +34,7 @@ library
       Lib1
       Lib2
       Lib3
+      Lib4
   other-modules:
       Paths_fp2023
   hs-source-dirs:
@@ -105,6 +106,27 @@ executable fp2023-select-more
     , fp2023
     , repline
     , terminal-size
+  default-language: Haskell2010
+
+executable fp2023-sql-client
+  main-is: Main.hs
+  other-modules:
+      Paths_fp2023
+  hs-source-dirs:
+      sql-client
+  default-extensions:
+      ImportQualifiedPost
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      HTTP
+    , base >=4.7 && <5
+    , bytestring
+    , extra
+    , fp2023
+    , repline
+    , terminal-size
+    , uri-encode
+    , yaml
   default-language: Haskell2010
 
 test-suite fp2023-test
