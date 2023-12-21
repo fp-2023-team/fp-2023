@@ -34,7 +34,9 @@ data ParsedStatement = SelectStatement {
         -- Table names
         fromArgs :: [String],
         -- All 'where' args are column_name0 ?=? column_name1 ORed
-        whereArgs :: [(WhereOperand, WhereOperand, WhereOperator)]
+        whereArgs :: [(WhereOperand, WhereOperand, WhereOperator)],
+        -- String stores column name while Boolean is true if it shall be sorted in ascending order
+        orderByArgs :: [(String, Bool)]
     }
     | ShowTableStatement {
         -- Either TABLES or TABLE name[, ...]
@@ -56,8 +58,10 @@ data ParsedStatement = SelectStatement {
     }
     | CreateTableStatement {
       tablename :: String,
-      collumns :: [Column],
-      pkey :: [String]
+      columns :: [Column]
+    }
+    | DropTableStatement {
+      tablename :: String
     }
 
 
@@ -149,6 +153,8 @@ parseStatement a = do
             else if(parseCompare x "insert") then parseInsert
             else if(parseCompare x "update") then parseUpdate
             else if(parseCompare x "delete") then parseDelete
+            else if(parseCompare x "create") then parseCreate
+            else if(parseCompare x "drop")   then parseDrop
             else throwE "Keyword unrecognised"
           return(result)
 
@@ -190,7 +196,8 @@ parseSelect = do
       x1 <- parseSelectArgs
       parsedStatement <- parseFromArgs x1
       parsedWhereArgs <- parseWhereArgs
-      return (SelectStatement { selectArgs = (selectArgs parsedStatement), fromArgs = (fromArgs parsedStatement), whereArgs = parsedWhereArgs})
+      parsedOrderArgs <- parseOrderByArgs
+      return (SelectStatement { selectArgs = (selectArgs parsedStatement), fromArgs = (fromArgs parsedStatement), whereArgs = parsedWhereArgs, orderByArgs = parsedOrderArgs})
       where
         parseSelectArgs :: EitherT ErrorMessage (State String) ParsedStatement
         parseSelectArgs = do
@@ -255,6 +262,51 @@ parseSelect = do
                                      | x == ""   -> throwE $ "Unexpected " ++ [sym]
                                      | otherwise -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ x
 
+        parseOrderByArgs :: EitherT ErrorMessage (State String) [(String, Bool)]
+        parseOrderByArgs = do
+          input <- lift get
+          case (input) of
+            [] -> return [] 
+            _  -> do
+              keyword <- parseKeyword
+              if(parseCompare keyword "order") 
+                then do
+                  keywordBy <- parseKeyword
+                  _ <- if(parseCompare keywordBy "by") then return Nothing else throwE "Missing BY keyword after ORDER"
+                  parseOrderColumnList  
+                else throwE $ "Unrecognised statement: " ++ keyword
+          where
+            parseOrderColumnList :: EitherT ErrorMessage (State String) [(String, Bool)]
+            parseOrderColumnList = do
+              (sym, orderColumn) <- parseOrderColumn
+              case (sym) of
+                ',' -> do
+                  parsedOrderList <- parseOrderColumnList
+                  return (orderColumn : parsedOrderList)
+                ';' -> return [orderColumn]
+                _   -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ (fst orderColumn)
+
+            parseOrderColumn :: EitherT ErrorMessage (State String) (Char, (String, Bool))
+            parseOrderColumn = do
+              input <- lift get
+              case (input) of
+                [] -> throwE "Missing column name in ORDER BY statement"
+                _  -> do
+                  (columnName, sym, rem) <- return $ parseWord input
+                  _ <- if (columnName /= "") then return Nothing else throwE $ "Missing column name"
+                  case (sym) of
+                    ' ' -> do
+                      (dirKey, sym2, rem2) <- return $ parseWord rem
+                      lift $ put rem2
+                      case (dirKey) of
+                        word | parseCompare dirKey "asc"  -> return (sym2, (columnName, True))
+                             | parseCompare dirKey "desc" -> return (sym2, (columnName, False))
+                             | otherwise -> throwE $ "Unrecognised keyword: " ++ dirKey
+                    _   -> do
+                      lift $ put rem
+                      return (sym, (columnName, True))
+
+
 parseWhereArgs :: EitherT ErrorMessage (State String) [(WhereOperand, WhereOperand, WhereOperator)]
 parseWhereArgs = do
   input <- lift get
@@ -265,7 +317,7 @@ parseWhereArgs = do
      xs <- lift get
      if (parseCompare x "where")
       then if (xs /= "") then parseWhereArgs' else throwE "Missing where statement"
-      else throwE $ "Unrecognised statement: " ++ x
+      else return []
   where
     parseWhereArgs' :: EitherT ErrorMessage (State String) [(WhereOperand, WhereOperand, WhereOperator)]
     parseWhereArgs' = do
@@ -483,6 +535,74 @@ parseDelete = do
           parsedWhereArgs <- parseWhereArgs
           return $ DeleteStatement {tablename = parsedTablename, whereArgs = parsedWhereArgs}
         ';' -> return $ DeleteStatement {tablename = parsedTablename, whereArgs = []}
+        otherwise -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ parsedTablename
+
+parseCreate :: EitherT ErrorMessage (State String) ParsedStatement
+parseCreate = do
+  input <- lift get
+  case (input) of
+    [] -> throwE "Missing create statement"
+    _  -> do
+      keyword <- parseKeyword
+      _ <- if(parseCompare keyword "table") then return Nothing else throwE "Missing TABLE keyword"
+      rem <- lift get
+      (parsedTablename, sym, rem2) <- return $ parseWord rem
+      _ <- if (parsedTablename == "") then throwE $ "Missing tablename" else return Nothing
+      case (sym) of
+        '(' -> do
+          lift $ put rem2
+          parsedColumns <- parseColumnDeclarationList
+          return $ CreateTableStatement {tablename = parsedTablename, columns = parsedColumns}
+        ';' -> throwE $ "Missing columns in CREATE TABLE statement"
+        otherwise -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ parsedTablename
+
+parseColumnDeclarationList :: EitherT ErrorMessage (State String) [Column]
+parseColumnDeclarationList = do
+  (sym, column) <- parseColumnDeclaration
+  case (sym) of
+    ',' -> do
+      parsedDeclarationList <- parseColumnDeclarationList
+      return (column : parsedDeclarationList)
+    ')' -> do
+      rem <- lift get
+      _ <- if (rem /= "") then throwE $ "Unexpected " ++ rem ++ " after column declaration list" else return Nothing
+      return [column]
+    _   -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ (show column)
+
+parseColumnDeclaration :: EitherT ErrorMessage (State String) (Char, Column)
+parseColumnDeclaration = do
+  input <- lift get
+  case (input) of
+    [] -> throwE "Missing closing bracket of collumn declarations"
+    _ -> do
+      (columnName, sym, rem) <- return $ parseWord input
+      case (sym) of
+        ' ' -> do
+          (typeName, sym2, rem2) <- return $ parseWord rem
+          lift $ put rem2
+          case (typeName) of
+            word | parseCompare typeName "string" -> return (sym2, Column columnName StringType)
+                 | parseCompare typeName "bool" -> return (sym2, Column columnName BoolType)
+                 | parseCompare typeName "int" -> return (sym2, Column columnName IntegerType)
+                 | otherwise -> throwE $ "Unrecognised type name: " ++ typeName
+        _   -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ columnName
+
+parseDrop :: EitherT ErrorMessage (State String) ParsedStatement
+parseDrop = do
+  input <- lift get
+  case (input) of
+    [] -> throwE "Missing drop statement"
+    _  -> do
+      keyword <- parseKeyword
+      _ <- if(parseCompare keyword "table") then return Nothing else throwE "Missing TABLE keyword"
+      rem <- lift get
+      (parsedTablename, sym, rem2) <- return $ parseWord rem
+      _ <- if (parsedTablename == "") then throwE $ "Missing tablename" else return Nothing
+      case (sym) of
+        ';' -> do
+          lift $ put rem2
+          return $ DropTableStatement {tablename = parsedTablename}
+        ' ' -> throwE $ "Unexpected " ++ rem2 ++ " after " ++ parsedTablename
         otherwise -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ parsedTablename
 
 getTermination :: String -> Char
