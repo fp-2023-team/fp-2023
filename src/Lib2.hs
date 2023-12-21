@@ -36,7 +36,7 @@ data ParsedStatement = SelectStatement {
         -- All 'where' args are column_name0 ?=? column_name1 ORed
         whereArgs :: [(WhereOperand, WhereOperand, WhereOperator)],
         -- String stores column name while Boolean is true if it shall be sorted in ascending order
-        orderByArgs :: [(String, Bool)]
+        orderByArgs :: [((Maybe String, String), Bool)]
     }
     | ShowTableStatement {
         -- Either TABLES or TABLE name[, ...]
@@ -262,7 +262,7 @@ parseSelect = do
                                      | x == ""   -> throwE $ "Unexpected " ++ [sym]
                                      | otherwise -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ x
 
-        parseOrderByArgs :: EitherT ErrorMessage (State String) [(String, Bool)]
+        parseOrderByArgs :: EitherT ErrorMessage (State String) [((Maybe String, String), Bool)]
         parseOrderByArgs = do
           input <- lift get
           case (input) of
@@ -276,7 +276,7 @@ parseSelect = do
                   parseOrderColumnList  
                 else throwE $ "Unrecognised statement: " ++ keyword
           where
-            parseOrderColumnList :: EitherT ErrorMessage (State String) [(String, Bool)]
+            parseOrderColumnList :: EitherT ErrorMessage (State String) [((Maybe String, String), Bool)]
             parseOrderColumnList = do
               (sym, orderColumn) <- parseOrderColumn
               case (sym) of
@@ -284,9 +284,9 @@ parseSelect = do
                   parsedOrderList <- parseOrderColumnList
                   return (orderColumn : parsedOrderList)
                 ';' -> return [orderColumn]
-                _   -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ (fst orderColumn)
+                _   -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ (snd $ fst orderColumn)
 
-            parseOrderColumn :: EitherT ErrorMessage (State String) (Char, (String, Bool))
+            parseOrderColumn :: EitherT ErrorMessage (State String) (Char, ((Maybe String, String), Bool))
             parseOrderColumn = do
               input <- lift get
               case (input) of
@@ -294,17 +294,18 @@ parseSelect = do
                 _  -> do
                   (columnName, sym, rem) <- return $ parseWord input
                   _ <- if (columnName /= "") then return Nothing else throwE $ "Missing column name"
+                  fullColumnName <- addTtoEither $ parseFullCollumnName columnName
                   case (sym) of
                     ' ' -> do
                       (dirKey, sym2, rem2) <- return $ parseWord rem
                       lift $ put rem2
                       case (dirKey) of
-                        word | parseCompare dirKey "asc"  -> return (sym2, (columnName, True))
-                             | parseCompare dirKey "desc" -> return (sym2, (columnName, False))
+                        word | parseCompare dirKey "asc"  -> return (sym2, (fullColumnName, True))
+                             | parseCompare dirKey "desc" -> return (sym2, (fullColumnName, False))
                              | otherwise -> throwE $ "Unrecognised keyword: " ++ dirKey
                     _   -> do
                       lift $ put rem
-                      return (sym, (columnName, True))
+                      return (sym, (fullColumnName, True))
 
 
 parseWhereArgs :: EitherT ErrorMessage (State String) [(WhereOperand, WhereOperand, WhereOperator)]
