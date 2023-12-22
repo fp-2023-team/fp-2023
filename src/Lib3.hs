@@ -62,18 +62,9 @@ executeSql sql = do
     in case (eitherRes) of
       (Left err, _) -> Pure $ Left err
       (Right value, _) -> Pure $ Right value
-  --database <- getRelevantTables ["duplicates", "employees", "flags", "invalid1", "invalid2", "long_strings", "jobs"]
-  --time <- getTime
   executionResult <- case(fixedParsed) of
     Left e -> return $ Left e 
     Right (SelectStatement a from b c) -> (getRelevantTables from) >>= (executeIfPossible (SelectStatement a from b c))
-      {-database <- getRelevantTables from
-      executeIfPossible database (SelectStatement a from b c)
-      case(database) of
-        Left e -> return $ Left e
-        Right exist -> case findNow (SelectStatement a from b c) of
-          False -> Pure $ executeStatement (SelectStatement a from b c) exist
-          True -> Pure $ executeStatement (changeNow (SelectStatement a from b c)) (timeTable time:exist)-}
     Right (ShowTableStatement a) -> case a of
       Just table -> (getRelevantTables [table]) >>= (executeIfPossible  (ShowTableStatement a))
       Nothing -> do
@@ -84,22 +75,6 @@ executeSql sql = do
     Right (DeleteStatement table a) -> (getRelevantTables [table]) >>= (executeIfPossible  (DeleteStatement table a))
     Right (CreateTableStatement table a) -> (getRelevantTables [table]) >>= (executeIfPossible  (CreateTableStatement table a))
     Right (DropTableStatement table) -> (getRelevantTables [table]) >>= (executeIfPossible  (DropTableStatement table))
-
-
-      --database <- getRelevantTables [table]
-        {-case(database) of
-          Left e -> return $ Left e
-          Right exist -> case findNow (SelectStatement a from b c) of
-            False -> Pure $ executeStatement (SelectStatement a from b c) exist
-            True -> Pure $ executeStatement (changeNow (SelectStatement a from b c)) (timeTable time:exist)
-      
-    --Right UpdateStatement table a b -> do
-
-    Right parsedStmt -> case(database) of
-      Left e -> return $ Left e
-      Right exist -> case findNow parsedStmt of
-        False -> Pure $ executeStatement parsedStmt exist
-        True -> Pure $ executeStatement (changeNow parsedStmt) (timeTable time:exist)-}
   case (executionResult) of
     Left e -> return $ Left e
     Right result -> case (fixedParsed) of
