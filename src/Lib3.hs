@@ -36,6 +36,7 @@ data ExecutionAlgebra next
     = GetTime (UTCTime -> next)
     | SaveTable TableName TableContent (() -> next)
     | LoadTable TableName (TableContent -> next)
+    | GetTableList ([TableName] -> next)
     -- feel free to add more constructors here
     deriving Functor
 
@@ -50,6 +51,9 @@ saveTable name content = liftF $ SaveTable name content id
 loadTable :: TableName -> Execution TableContent
 loadTable name = liftF $ LoadTable name id
 
+getTableList :: Execution [TableName]
+getTableList = liftF $ GetTableList id
+
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
   parsed <- Pure $ parseStatement sql
@@ -58,16 +62,44 @@ executeSql sql = do
     in case (eitherRes) of
       (Left err, _) -> Pure $ Left err
       (Right value, _) -> Pure $ Right value
-  database <- getRelevantTables ["duplicates", "employees", "flags", "invalid1", "invalid2", "long_strings", "jobs"]
-  time <- getTime
+  --database <- getRelevantTables ["duplicates", "employees", "flags", "invalid1", "invalid2", "long_strings", "jobs"]
+  --time <- getTime
   executionResult <- case(fixedParsed) of
     Left e -> return $ Left e 
-    --Right SelectStatement 
+    Right (SelectStatement a from b c) -> (getRelevantTables from) >>= (executeIfPossible (SelectStatement a from b c))
+      {-database <- getRelevantTables from
+      executeIfPossible database (SelectStatement a from b c)
+      case(database) of
+        Left e -> return $ Left e
+        Right exist -> case findNow (SelectStatement a from b c) of
+          False -> Pure $ executeStatement (SelectStatement a from b c) exist
+          True -> Pure $ executeStatement (changeNow (SelectStatement a from b c)) (timeTable time:exist)-}
+    Right (ShowTableStatement a) -> case a of
+      Just table -> (getRelevantTables [table]) >>= (executeIfPossible  (ShowTableStatement a))
+      Nothing -> do
+        allTables <- getTableList
+        (getRelevantTables allTables) >>= (executeIfPossible (ShowTableStatement a))
+    Right (UpdateStatement table a b) -> (getRelevantTables [table]) >>= (executeIfPossible  (UpdateStatement table a b))
+    Right (InsertIntoStatement table a b) -> (getRelevantTables [table]) >>= (executeIfPossible  (InsertIntoStatement table a b))
+    Right (DeleteStatement table a) -> (getRelevantTables [table]) >>= (executeIfPossible  (DeleteStatement table a))
+    Right (CreateTableStatement table a) -> (getRelevantTables [table]) >>= (executeIfPossible  (CreateTableStatement table a))
+    Right (DropTableStatement table) -> (getRelevantTables [table]) >>= (executeIfPossible  (DropTableStatement table))
+
+
+      --database <- getRelevantTables [table]
+        {-case(database) of
+          Left e -> return $ Left e
+          Right exist -> case findNow (SelectStatement a from b c) of
+            False -> Pure $ executeStatement (SelectStatement a from b c) exist
+            True -> Pure $ executeStatement (changeNow (SelectStatement a from b c)) (timeTable time:exist)
+      
+    --Right UpdateStatement table a b -> do
+
     Right parsedStmt -> case(database) of
       Left e -> return $ Left e
       Right exist -> case findNow parsedStmt of
         False -> Pure $ executeStatement parsedStmt exist
-        True -> Pure $ executeStatement (changeNow parsedStmt) (timeTable time:exist)
+        True -> Pure $ executeStatement (changeNow parsedStmt) (timeTable time:exist)-}
   case (executionResult) of
     Left e -> return $ Left e
     Right result -> case (fixedParsed) of
@@ -129,6 +161,14 @@ changeNow (SelectStatement a b c d) = (SelectStatement (map changeNow' a) ("date
     changeNow' (Left (_, Func0 _)) = Right (Just "datetime", "datetime")
     changeNow' other = other
 changeNow notSelect = notSelect
+
+executeIfPossible ::  ParsedStatement -> Either ErrorMessage [(TableName, DataFrame)] -> Execution (Either ErrorMessage DataFrame)
+executeIfPossible stmt (Left err) = return $ Left err
+executeIfPossible stmt (Right database)= case findNow stmt of
+  False -> Pure $ executeStatement stmt database
+  True -> do
+    time <- getTime
+    Pure $ executeStatement (changeNow stmt) (timeTable time:database)
   
 class JSONserializable a where
   serialize :: a -> String

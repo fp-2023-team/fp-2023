@@ -804,7 +804,7 @@ parseCompare _ _ = False
 -- Executes a parsed statemet with the given database. Produces a DataFrame.
 executeStatement :: ParsedStatement -> [(TableName, DataFrame)] -> Either ErrorMessage DataFrame
 executeStatement statement@(SelectStatement selectArgs' tableNames' whereArgs' orderByArgs') database' = do
-    _ <- guardCheck (True) (show statement)
+    --_ <- guardCheck (True) (show statement)
     _ <- guardCheck (null selectArgs')
         $ "Zero columns in 'select'"
     _ <- guardCheck (any (isLeft) selectArgs' && anyRight selectArgs')

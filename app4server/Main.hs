@@ -87,6 +87,12 @@ handleRequest state = do
                             case lookup needle curState of
                                 Nothing -> error $ "Could not find table " ++ name
                                 Just x -> return x
+                runStep (Lib3.GetTableList next) = (atomically $ getTables state) >>= return . next
+                    where
+                        getTables :: TVar [(String, b)] -> STM [String]
+                        getTables state' = do
+                            curState <- readTVar state'
+                            return $ fmap fst curState
 
 main :: IO ()
 main = do
