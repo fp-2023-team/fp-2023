@@ -1045,6 +1045,14 @@ executeStatement (DeleteStatement tableName' whereArgs') database' = do
                     Constant str -> str
                     ColumnName (_, str) -> case lookup str namedRows of
                         Just (StringValue val) -> val
+executeStatement (CreateTableStatement tablename' columns') database' = do
+    _ <- guardCheck (not $ null $ lookup tablename' database')
+        $ "Table by name " ++ tablename' ++ " already exists"
+    Right $ DataFrame columns' []
+executeStatement (DropTableStatement tablename') database' = do
+    _ <- guardCheck (null $ lookup tablename' database')
+        $ "Table by name " ++ tablename' ++ " does not exist"
+    executeStatement (ShowTableStatement Nothing) database'
 executeStatement _ _ = Left $ "Unknown unsupported statement"
 
 nullOrAny :: (Foldable t) => (a -> Bool) -> t a -> Bool
