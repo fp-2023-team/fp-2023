@@ -70,7 +70,7 @@ executeSql sql = do
   case (executionResult) of
     Left e -> return $ Left e
     Right result -> case (fixedParsed) of
-      Right (SelectStatement _ _ _) -> return $ Right result
+      Right (SelectStatement _ _ _ _) -> return $ Right result
       Right (ShowTableStatement _) -> return $ Right result
       Right (InsertIntoStatement tablename _ _) -> do 
         persistTable tablename result
@@ -109,7 +109,7 @@ getTable name = do
     Just a -> Pure $ Right (name, a)
 
 findNow :: ParsedStatement -> Bool
-findNow (SelectStatement a _ _) = findNow' a
+findNow (SelectStatement a _ _ _) = findNow' a
   where
     findNow' :: [Either ([(Maybe String, String)], Lib2.Function) (Maybe String, String)] -> Bool
     findNow' [] = False
@@ -122,7 +122,7 @@ timeTable :: UTCTime -> (TableName, DataFrame)
 timeTable time = ("datetime", DataFrame [(Column "datetime" StringType)] [[StringValue $ show time]])
 
 changeNow :: ParsedStatement -> ParsedStatement
-changeNow (SelectStatement a b c) = (SelectStatement (map changeNow' a) ("datetime":b) c)
+changeNow (SelectStatement a b c d) = (SelectStatement (map changeNow' a) ("datetime":b) c d)
   where
     changeNow' :: Either ([(Maybe String, String)], Lib2.Function) (Maybe String, String) -> Either ([(Maybe String, String)], Lib2.Function) (Maybe String, String)
     changeNow' (Left (_, Func0 _)) = Right (Just "datetime", "datetime")
