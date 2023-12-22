@@ -62,6 +62,7 @@ executeSql sql = do
   time <- getTime
   executionResult <- case(fixedParsed) of
     Left e -> return $ Left e 
+    --Right SelectStatement 
     Right parsedStmt -> case(database) of
       Left e -> return $ Left e
       Right exist -> case findNow parsedStmt of
@@ -105,7 +106,7 @@ getTable name = do
   table <- loadTable name
   deserializedTable1 <- Pure $ deserialize table 
   case (deserializedTable1) of
-    Nothing -> return $ Left $ "Failed to deserialize table \"" ++ name ++ "\""
+    Nothing -> return $ Left $ "Failed to fetch table \"" ++ name ++ "\""
     Just a -> Pure $ Right (name, a)
 
 findNow :: ParsedStatement -> Bool
