@@ -318,7 +318,9 @@ parseWhereArgs = do
      xs <- lift get
      if (parseCompare x "where")
       then if (xs /= "") then parseWhereArgs' else throwE "Missing where statement"
-      else return []
+      else do
+        lift $ put input
+        return []
   where
     parseWhereArgs' :: EitherT ErrorMessage (State String) [(WhereOperand, WhereOperand, WhereOperator)]
     parseWhereArgs' = do
@@ -449,10 +451,13 @@ parseUpdate = do
     _  -> do
       (parsedTablename, sym, rem) <- return $ parseWord input
       _ <- if (sym == ';') then throwE "Missing list of updated values" else if(sym /= ' ') then throwE $ "Unexpected " ++ [sym] ++ " after " ++ parsedTablename else return Nothing
+      lift $ put rem
       (newAssignedValues, termChar) <- parseValueAssignment
       case (termChar) of
         ' ' -> do
           parseRes <- parseWhereArgs
+          leftover <- lift get
+          _ <- if (parseRes == [] && leftover /= "") then throwE "Unrecognised keyword at the end of the statement" else return Nothing
           return $ UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues, whereArgs = parseRes}
         ';' -> return $ UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues, whereArgs = []}
         otherwise -> throwE $ "Unexpected " ++ [termChar] ++ " after values assignment"
@@ -534,6 +539,8 @@ parseDelete = do
       case (sym) of
         ' ' -> do
           parsedWhereArgs <- parseWhereArgs
+          leftover <- lift get
+          _ <- if (parsedWhereArgs == [] && leftover /= "") then throwE "Unrecognised keyword at the end of the statement" else return Nothing
           return $ DeleteStatement {tablename = parsedTablename, whereArgs = parsedWhereArgs}
         ';' -> return $ DeleteStatement {tablename = parsedTablename, whereArgs = []}
         otherwise -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ parsedTablename
@@ -648,6 +655,7 @@ parseConstantList = do
                   word | parseCompare word "null" -> return (NullValue, sym, remainder)
                        | parseCompare word "true" -> return (BoolValue True, sym, remainder)
                        | isNumber word -> return (IntegerValue $ getNumber word, sym, remainder)
+                       | otherwise -> throwE $ "Unrecognised value: " ++ word
         otherwise -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ parsedWord
       case (newsym) of
         ')' -> return [manipulatedWord]
