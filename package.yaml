@@ -88,22 +88,12 @@ executables:
       - aeson
       - bytestring
       - json
-  fp2023-sql-client:
-    main: Main.hs
-    source-dirs: sql-client
-    ghc-options:
-      - -threaded
-      - -rtsopts
-      - -with-rtsopts=-N
-    dependencies:
-      - fp2023
-      - extra
-      - repline
-      - terminal-size
-      - HTTP
-      - uri-encode
+      - happstack-server
       - yaml
-      - bytestring
+      - stm
+      - async
+      - directory
+      - transformers
   fp2023-server:
     main: Main.hs
     source-dirs: app4server
@@ -127,6 +117,22 @@ executables:
       - async
       - directory
       - transformers
+  fp2023-sql-client:
+    main: Main.hs
+    source-dirs: sql-client
+    ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
+    dependencies:
+      - fp2023
+      - extra
+      - repline
+      - terminal-size
+      - HTTP
+      - uri-encode
+      - yaml
+      - bytestring
 
 tests:
   fp2023-test:

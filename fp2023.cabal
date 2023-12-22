@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       DataFrame
+      EitherT
       InMemoryTables
       Lessons.Lesson01
       Lessons.Lesson02
@@ -62,15 +63,21 @@ executable fp2023-manipulate
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
+    , async
     , base >=4.7 && <5
     , bytestring
+    , directory
     , extra
     , fp2023
     , free
+    , happstack-server
     , json
     , repline
+    , stm
     , terminal-size
     , time
+    , transformers
+    , yaml
   default-language: Haskell2010
 
 executable fp2023-select-all

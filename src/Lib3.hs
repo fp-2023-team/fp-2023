@@ -26,11 +26,11 @@ import Data.ByteString.Lazy.Char8 (pack, unpack)
 import Data.Char
 import Lib2
 import Data.Either (Either(Right))
-import Lib2 (executeStatement)
+import EitherT
+import Control.Monad.Trans.State.Strict
 
 type TableName = String
 type TableContent = String
-type ErrorMessage = String
 
 data ExecutionAlgebra next
     = GetTime (UTCTime -> next)
@@ -53,9 +53,14 @@ loadTable name = liftF $ LoadTable name id
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
   parsed <- Pure $ parseStatement sql
+  fixedParsed <- 
+    let eitherRes = runState (runEitherT parsed) ""
+    in case (eitherRes) of
+      (Left err, _) -> Pure $ Left err
+      (Right value, _) -> Pure $ Right value
   database <- getRelevantTables ["duplicates", "employees", "flags", "invalid1", "invalid2", "long_strings", "jobs"]
   time <- getTime
-  executionResult <- case(parsed) of
+  executionResult <- case(fixedParsed) of
     Left e -> return $ Left e 
     --Right SelectStatement 
     Right parsedStmt -> case(database) of
@@ -65,8 +70,8 @@ executeSql sql = do
         True -> Pure $ executeStatement (changeNow parsedStmt) (timeTable time:exist)
   case (executionResult) of
     Left e -> return $ Left e
-    Right result -> case (parsed) of
-      Right (SelectStatement _ _ _) -> return $ Right result
+    Right result -> case (fixedParsed) of
+      Right (SelectStatement _ _ _ _) -> return $ Right result
       Right (ShowTableStatement _) -> return $ Right result
       Right (InsertIntoStatement tablename _ _) -> do 
         persistTable tablename result
@@ -105,7 +110,7 @@ getTable name = do
     Just a -> Pure $ Right (name, a)
 
 findNow :: ParsedStatement -> Bool
-findNow (SelectStatement a _ _) = findNow' a
+findNow (SelectStatement a _ _ _) = findNow' a
   where
     findNow' :: [Either ([(Maybe String, String)], Lib2.Function) (Maybe String, String)] -> Bool
     findNow' [] = False
@@ -118,7 +123,7 @@ timeTable :: UTCTime -> (TableName, DataFrame)
 timeTable time = ("datetime", DataFrame [(Column "datetime" StringType)] [[StringValue $ show time]])
 
 changeNow :: ParsedStatement -> ParsedStatement
-changeNow (SelectStatement a b c) = (SelectStatement (map changeNow' a) ("datetime":b) c)
+changeNow (SelectStatement a b c d) = (SelectStatement (map changeNow' a) ("datetime":b) c d)
   where
     changeNow' :: Either ([(Maybe String, String)], Lib2.Function) (Maybe String, String) -> Either ([(Maybe String, String)], Lib2.Function) (Maybe String, String)
     changeNow' (Left (_, Func0 _)) = Right (Just "datetime", "datetime")
