@@ -670,6 +670,7 @@ runExecuteIO memoryDB (Free step) = do
           case table of
             Just a -> return a >>= return . next
             Nothing -> return "" >>= return . next
+          runStep (Lib3.GetTableList next) = fmap fst (readIORef memoryDB) >>= return . next
 
 getTableFromDB :: MemoryDatabase -> String -> IO (Maybe DataFrame)
 getTableFromDB ref name = do 
