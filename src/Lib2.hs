@@ -1052,7 +1052,9 @@ executeStatement (CreateTableStatement tablename' columns') database' = do
 executeStatement (DropTableStatement tablename') database' = do
     _ <- guardCheck (null $ lookup tablename' database')
         $ "Table by name " ++ tablename' ++ " does not exist"
-    executeStatement (ShowTableStatement Nothing) database'
+    executeStatement
+        (ShowTableStatement Nothing)
+        [table | table@(tableName'', _) <- database', tableName'' /= tablename']
 executeStatement _ _ = Left $ "Unknown unsupported statement"
 
 nullOrAny :: (Foldable t) => (a -> Bool) -> t a -> Bool
