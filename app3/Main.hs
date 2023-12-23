@@ -73,6 +73,7 @@ runExecuteIO (Free step) = do
         runStep (Lib3.SaveTable name content next) = (catch (writeFile ("./db/" ++ name ++ ".json") content) failedSave) >>= return . next
         runStep (Lib3.LoadTable name next) = (catch (readFile ("./db/" ++ name ++ ".json")) fileNotFound) >>= return . next
         runStep (Lib3.GetTableList next) = ((catch (listDirectory "./db/") noFilesFound) >>= return . (fmap cutJSON)) >>= return . next
+        runStep (Lib3.DeleteTable name next) = (catch (removeFile $ "./db/" ++ name ++ ".json") (failedDelete name)) >>= return . next
 
 fileNotFound :: SomeException -> IO String
 fileNotFound _ = return "Table not found"
@@ -83,6 +84,11 @@ noFilesFound _ = return []
 failedSave :: SomeException -> IO ()
 failedSave _ = do
   putStrLn "Error: failed to save!"
+  return ()
+
+failedDelete :: String -> SomeException -> IO ()
+failedDelete tableName _ = do
+  putStrLn $ "Error: failed to delete table '" ++ tableName ++ "'!"
   return ()
 
 cutJSON :: String -> String
