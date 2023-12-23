@@ -25,7 +25,7 @@ import EitherT
 import Control.Monad.Trans.State.Strict
 import Control.Monad.Trans.Class(lift, MonadTrans)
 import EitherT (addTtoEither)
-import Lib2 (ParsedStatement(orderByArgs))
+import Lib2 (ParsedStatement(orderByArgs, DropTableStatement))
 main :: IO ()
 main = hspec $ do
   
@@ -673,6 +673,160 @@ main = hspec $ do
       df <- runExecuteIO db (Lib3.executeSql "DELETE FROM employees;")
       dbdf <- getTableFromDB db "employees"
       dbdf `shouldBe` Just (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [])
+  describe "parser for fourth" $ do
+    it "parses create table" $ do
+      Lib2.parseStatement "CREATE TABLE table_name (column1 int, column2 string, column3 int);"
+      `shouldBe`
+      addTtoEither (Right (CreateTableStatement {
+        tablename = "table_name",
+        columns = [Column "column1" IntegerType, Column "column2" StringType, Column "column3" IntegerType]
+      }))
+    it "parses create table with extra whitespace" $ do
+      Lib2.parseStatement "CREATE         TABLE   table_name (column1  int,    column2   string,   column3      int ) ;"
+      `shouldBe`
+      addTtoEither (Right (CreateTableStatement {
+        tablename = "table_name",
+        columns = [Column "column1" IntegerType, Column "column2" StringType, Column "column3" IntegerType]
+      }))
+    it "parses create table case insensitive" $ do
+      Lib2.parseStatement "creAtE TaBLe table_name (column1 InT, column2 StRiNg, column3 iNt);"
+      `shouldBe`
+      addTtoEither (Right (CreateTableStatement {
+        tablename = "table_name",
+        columns = [Column "column1" IntegerType, Column "column2" StringType, Column "column3" IntegerType]
+      }))
+    it "error message on create table without table name specified" $ do
+      removeTFromEither (Lib2.parseStatement "CREATE TABLE (column1 int, column2 string, column3 int);")
+      `shouldSatisfy`
+      isLeft
+    it "error message on create table without column type specified" $ do
+      removeTFromEither (Lib2.parseStatement "CREATE TABLE table_name (column1, column2 string, column3 int);")
+      `shouldSatisfy`
+      isLeft
+    it "error message on create table without columns specified" $ do
+      removeTFromEither (Lib2.parseStatement "CREATE TABLE table_name ();")
+      `shouldSatisfy`
+      isLeft
+
+    it "parses drop table" $ do
+      Lib2.parseStatement "DROP TABLE table_name;"
+      `shouldBe`
+      addTtoEither (Right (DropTableStatement {
+        tablename = "table_name"
+      }))
+    it "parses drop table with extra whitespace" $ do
+      Lib2.parseStatement "DROP     TABLE       table_name  ; "
+      `shouldBe`
+      addTtoEither (Right (DropTableStatement {
+        tablename = "table_name"
+      }))
+    it "parses drop table case insensitive" $ do
+      Lib2.parseStatement "dRoP tAbLe table_name;"
+      `shouldBe`
+      addTtoEither (Right (DropTableStatement {
+        tablename = "table_name"
+      }))
+    it "error message on drop table without table name specified" $ do
+      removeTFromEither (Lib2.parseStatement "DROP TABLE;")
+      `shouldSatisfy`
+      isLeft
+
+
+
+    it "parses select with order by" $ do
+      Lib2.parseStatement "SELECT jobs.id, jobs.title FROM jobs ORDER BY jobs.id;" 
+      `shouldBe` 
+      addTtoEither (Right (SelectStatement {
+        selectArgs = [Right (Just "jobs","id"), Right (Just "jobs","title")],
+        fromArgs = ["jobs"],
+        whereArgs = [],
+        orderByArgs = [((Just "jobs","id"),True)]}))
+    it "parses select with order by and multiple tables" $ do
+      Lib2.parseStatement "SELECT employees.name, jobs.title, departments.location FROM employees, jobs, departments ORDER BY employees.name;" 
+      `shouldBe` 
+      addTtoEither (Right (SelectStatement {
+        selectArgs = [Right (Just "employees","name"),Right (Just "jobs","title"),Right (Just "departments","location")],
+        fromArgs = ["employees", "jobs", "departments"],
+        whereArgs = [],
+        orderByArgs = [((Just "employees","name"),True)]}))
+    it "parses select with order by and multiple tables without specifying table in order by" $ do
+      Lib2.parseStatement "SELECT employees.name, jobs.title, departments.location FROM employees, jobs, departments ORDER BY name;" 
+      `shouldBe` 
+      addTtoEither (Right (SelectStatement {
+        selectArgs = [Right (Just "employees","name"),Right (Just "jobs","title"),Right (Just "departments","location")],
+        fromArgs = ["employees", "jobs", "departments"],
+        whereArgs = [],
+        orderByArgs = [((Nothing,"name"), True)]}))
+    it "parses select with columns functions and order by" $ do
+      Lib2.parseStatement "SELECT employees.age, NOW() FROM employees ORDER BY employees.age;" 
+      `shouldBe` 
+      addTtoEither (Right (SelectStatement {
+        selectArgs = [Right (Just "employees","age"),Left ([], Func0 Lib2.now' )],
+        fromArgs =  ["employees"],
+        whereArgs = [],
+        orderByArgs = [((Just "employees","age"),True)]}))
+    it "parses select with multiple order by values" $ do
+      Lib2.parseStatement "SELECT jobs.id, jobs.title FROM jobs ORDER BY jobs.id, jobs.title;" 
+      `shouldBe` 
+      addTtoEither (Right (SelectStatement {
+        selectArgs = [Right (Just "jobs","id"), Right (Just "jobs","title")],
+        fromArgs = ["jobs"],
+        whereArgs = [],
+        orderByArgs = [((Just "jobs","id"),True),((Just "jobs","title"),True)]}))
+    it "parses select with where clause and order by" $ do
+      Lib2.parseStatement "SELECT employees.name, jobs.id FROM employees, jobs WHERE employees.name = jobs.id ORDER BY employees.name;"
+      `shouldBe`
+      addTtoEither (Right (SelectStatement {
+        selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "id")],
+        fromArgs = ["employees", "jobs"],
+        whereArgs = [( ColumnName (Just "employees", "name"), ColumnName (Just "jobs", "id"),  whereEq)],
+        orderByArgs = []}))
+    it "parses select with where OR clause" $ do
+      Lib2.parseStatement "SELECT employees.name, jobs.id FROM employees, jobs WHERE employees.name >= jobs.id OR employees.surname <= jobs.id ORDER BY employees.name;"
+      `shouldBe`
+      addTtoEither (Right (SelectStatement {
+        selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "id")],
+        fromArgs = ["employees", "jobs"],
+        whereArgs = [
+          (ColumnName (Just "employees", "name"), ColumnName (Just "jobs", "id"), whereEq), 
+          (ColumnName (Just "employees", "surname"), ColumnName (Just "jobs", "id"),  whereEq)
+        ],
+        orderByArgs = []}))
+  describe "Lib3.executeSql for fourth" $ do
+    it "executes select with order by DESC" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT jobs.id, jobs.title FROM jobs ORDER BY jobs.id DESC;")
+      df `shouldBe` Right (DataFrame [Column "jobs.id" IntegerType, Column "jobs.title" StringType] [[IntegerValue 9, StringValue "Assistant"], [IntegerValue 8, StringValue "Lecturer"]])
+    it "executes select with order by ASC" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT jobs.id, jobs.title FROM jobs ORDER BY jobs.id ASC;")
+      df `shouldBe` Right (DataFrame [Column "jobs.id" IntegerType, Column "jobs.title" StringType] [[IntegerValue 8, StringValue "Assistant"], [IntegerValue 9, StringValue "Lecturer"]])
+    it "executes select with order by and multiple tables" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs ORDER BY employees.name;")
+      df `shouldBe` Right (DataFrame [Column "employees.name" StringType, Column "jobs.title" StringType] [[StringValue "Vi", StringValue "Assistant"], [StringValue "Vi", StringValue "Lecturer"], [StringValue "Ed", StringValue "Assistant"], [StringValue "Ed", StringValue "Lecturer"]])
+    it "executes select with order by and multiple tables without specifying table in order by" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs ORDER BY name;")
+      df `shouldBe` Right (DataFrame [Column "employees.name" StringType, Column "jobs.title" StringType] [[StringValue "Vi", StringValue "Assistant"], [StringValue "Vi", StringValue "Lecturer"], [StringValue "Ed", StringValue "Assistant"], [StringValue "Ed", StringValue "Lecturer"]])
+    it "executes select with columns functions and order by" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT employees.id, NOW() FROM employees ORDER BY employees.id;")
+      df `shouldBe` Right (DataFrame [Column "employees.id" IntegerType, Column "datetime.datetime" StringType] [[IntegerValue 1, StringValue "1984-11-28 00:00:00 UTC"], [IntegerValue 2, StringValue "1984-11-28 00:00:00 UTC"]])
+    it "executes select with multiple order by values" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "SELECT jobs.id, jobs.title FROM jobs ORDER BY jobs.id, jobs.title;")
+      df `shouldBe` Right (DataFrame [Column "jobs.id" IntegerType, Column "jobs.title" StringType] [[IntegerValue 8, StringValue "Assistant"], [IntegerValue 9, StringValue "Lecturer"]])
+    it "executes drop table" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "DROP TABLE jobs;")
+      df `shouldBe` Left "something"
+    it "executes create table" $ do
+      db <- testSetup
+      df <- runExecuteIO db (Lib3.executeSql "CREATE TABLE table_name (column1 int, column2 string, column3 int);")
+      df `shouldBe` Left "something"
+      
+
 
 type MemoryDatabase = IORef [(String, String)]
 

@@ -1145,7 +1145,12 @@ instance Eq ParsedStatement where
     tn1 == tn2 && vo1 == vo2 && v1 == v2
   DeleteStatement tn1 wa1 == DeleteStatement tn2 wa2 =
     tn1 == tn2 && wa1 == wa2
+  CreateTableStatement tn1 cl1 == CreateTableStatement tn2 cl2 =
+    tn1 == tn2 && cl1 == cl2
+  DropTableStatement tn1 == DropTableStatement tn2 =
+    tn1 == tn2
   _ == _ = False
+  
 
 instance Show Function where
   show (Func0 _) = " NOW() "
@@ -1164,6 +1169,8 @@ instance Show ParsedStatement where
   show (UpdateStatement tn av wa) = "UpdateStatement: " ++ show tn ++ " " ++ show av ++ " " ++ show wa
   show (InsertIntoStatement tn vo v) = "InsertIntoStatement: "  ++ show tn ++ " " ++ show vo ++ " " ++ show v
   show (DeleteStatement tn wa) = "DeleteStatement: " ++ show tn ++ " " ++ show wa
+  show (CreateTableStatement tn wa) = "CreateTableStatement: " ++ show tn ++ " " ++ show wa
+  show (DropTableStatement wa) = "DropTableStatement: " ++ show wa
 
 instance Eq Function where 
   (Func0 _) == (Func0 _) = True
