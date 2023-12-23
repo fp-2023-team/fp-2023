@@ -16,6 +16,15 @@ data Value
   | NullValue
   deriving (Show, Eq)
 
+instance Ord Value where
+    compare (IntegerValue x) (IntegerValue y) = compare x y
+    compare (StringValue x) (StringValue y) = compare x y
+    compare (BoolValue x) (BoolValue y) = compare x y
+    compare NullValue NullValue = EQ
+    compare NullValue _ = LT
+    compare _ NullValue = GT
+    compare _ _ = EQ
+
 type Row = [Value]
 
 data DataFrame = DataFrame [Column] [Row]
