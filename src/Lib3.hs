@@ -93,6 +93,9 @@ executeSql sql = do
       Right (DeleteStatement tablename _) -> do
         persistTable tablename result
         return $ Right result
+      Right (DropTableStatement tablename) -> do
+        deleteTable tablename
+        return $ Right result
 
 getRelevantTables :: [TableName] -> Execution (Either ErrorMessage [(TableName, DataFrame)])
 getRelevantTables [] = do
