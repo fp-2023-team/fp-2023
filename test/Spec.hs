@@ -780,7 +780,7 @@ main = hspec $ do
         selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "id")],
         fromArgs = ["employees", "jobs"],
         whereArgs = [( ColumnName (Just "employees", "name"), ColumnName (Just "jobs", "id"),  whereEq)],
-        orderByArgs = []}))
+        orderByArgs = [((Just "employees","name"),True)]}))
     it "parses select with where OR clause" $ do
       Lib2.parseStatement "SELECT employees.name, jobs.id FROM employees, jobs WHERE employees.name >= jobs.id OR employees.surname <= jobs.id ORDER BY employees.name;"
       `shouldBe`
@@ -791,12 +791,12 @@ main = hspec $ do
           (ColumnName (Just "employees", "name"), ColumnName (Just "jobs", "id"), whereEq), 
           (ColumnName (Just "employees", "surname"), ColumnName (Just "jobs", "id"),  whereEq)
         ],
-        orderByArgs = []}))
+        orderByArgs = [((Just "employees","name"),True)]}))
   describe "Lib3.executeSql for fourth" $ do
     it "executes select with order by DESC" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "SELECT jobs.id, jobs.title FROM jobs ORDER BY jobs.id DESC;")
-      df `shouldBe` Right (DataFrame [Column "jobs.id" IntegerType, Column "jobs.title" StringType] [[IntegerValue 9, StringValue "Assistant"], [IntegerValue 8, StringValue "Lecturer"]])
+      df `shouldBe` Right (DataFrame [Column "jobs.id" IntegerType, Column "jobs.title" StringType] [[IntegerValue 9, StringValue "Lecturer"], [IntegerValue 8, StringValue "Assistant"]])
     it "executes select with order by ASC" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "SELECT jobs.id, jobs.title FROM jobs ORDER BY jobs.id ASC;")
@@ -804,11 +804,11 @@ main = hspec $ do
     it "executes select with order by and multiple tables" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs ORDER BY employees.name;")
-      df `shouldBe` Right (DataFrame [Column "employees.name" StringType, Column "jobs.title" StringType] [[StringValue "Vi", StringValue "Assistant"], [StringValue "Vi", StringValue "Lecturer"], [StringValue "Ed", StringValue "Assistant"], [StringValue "Ed", StringValue "Lecturer"]])
+      df `shouldBe` Right (DataFrame [Column "employees.name" StringType, Column "jobs.title" StringType] [[StringValue "Ed", StringValue "Assistant"], [StringValue "Ed", StringValue "Lecturer"], [StringValue "Vi", StringValue "Assistant"], [StringValue "Vi", StringValue "Lecturer"]])
     it "executes select with order by and multiple tables without specifying table in order by" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs ORDER BY name;")
-      df `shouldBe` Right (DataFrame [Column "employees.name" StringType, Column "jobs.title" StringType] [[StringValue "Vi", StringValue "Assistant"], [StringValue "Vi", StringValue "Lecturer"], [StringValue "Ed", StringValue "Assistant"], [StringValue "Ed", StringValue "Lecturer"]])
+      df `shouldBe` Right (DataFrame [Column "employees.name" StringType, Column "jobs.title" StringType] [[StringValue "Ed", StringValue "Assistant"], [StringValue "Ed", StringValue "Lecturer"], [StringValue "Vi", StringValue "Assistant"], [StringValue "Vi", StringValue "Lecturer"]])
     it "executes select with columns functions and order by" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "SELECT employees.id, NOW() FROM employees ORDER BY employees.id;")
@@ -820,11 +820,11 @@ main = hspec $ do
     it "executes drop table" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "DROP TABLE jobs;")
-      df `shouldBe` Left "something"
+      df `shouldBe` Right (DataFrame [Column "table_name" StringType] [])
     it "executes create table" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "CREATE TABLE table_name (column1 int, column2 string, column3 int);")
-      df `shouldBe` Left "something"
+      df `shouldBe` Right (DataFrame [Column "column1" IntegerType, Column "column2" StringType, Column "column3" IntegerType] [])
       
 
 
@@ -849,6 +849,7 @@ runExecuteIO memoryDB (Free step) = do
             Just a -> return a >>= return . next
             Nothing -> return "" >>= return . next
         runStep (Lib3.GetTableList next) = readIORef memoryDB >>= (return . next) . (fmap fst)
+        runStep (Lib3.DeleteTable name next) = modifyIORef' memoryDB (deleteTable name) >>= return . next
 
 
 getTableFromDB :: MemoryDatabase -> String -> IO (Maybe DataFrame)
@@ -863,6 +864,13 @@ modifyDatabase a [] = [a]
 modifyDatabase (name, content) ((x, y):xs) = case x == name of
   True -> ((x, content):xs)
   False -> ((x, y) : modifyDatabase (name, content) xs)
+
+deleteTable :: String -> [(String, String)] -> [(String, String)]
+deleteTable _ [] = []
+deleteTable key ((k, v):rest)
+    | key == k  = deleteTable key rest
+    | otherwise = (k, v) : deleteTable key rest
+
 
 
 whereEq :: String -> String -> Bool
