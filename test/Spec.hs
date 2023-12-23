@@ -28,7 +28,7 @@ import EitherT (addTtoEither)
 import Lib2 (ParsedStatement(orderByArgs))
 main :: IO ()
 main = hspec $ do
-  {-
+  
   describe "Lib1.findTableByName" $ do
     it "handles empty lists" $ do
       Lib1.findTableByName [] "" `shouldBe` Nothing
@@ -59,7 +59,7 @@ main = hspec $ do
   describe "Lib1.renderDataFrameAsTable" $ do
     it "renders a table" $ do
       Lib1.renderDataFrameAsTable 100 (snd D.tableEmployees) `shouldSatisfy` not . null
--}
+
   describe "Lib2.parseStatement" $ do
     it "parses a show tables statement" $ do
       Lib2.parseStatement "SHOW TABLES;" `shouldBe` addTtoEither (Right (ShowTableStatement {showTableArgs = Nothing}))
@@ -88,61 +88,61 @@ main = hspec $ do
       Lib2.parseStatement "SELECT id FROM employees WHERE 'a' >= 'b' OR name >= 'Z';" `shouldBe` addTtoEither (Right (SelectStatement {selectArgs = [Right (Nothing, "id")], fromArgs = ["employees"], whereArgs = [(Constant "a", Constant "b", dummy2), (ColumnName (Nothing, "name"), Constant "Z", dummy2)], orderByArgs = []}))
     it "parses a where or function with strings, <= comparison, combined with sum" $ do
       Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" `shouldBe` addTtoEither (Right (SelectStatement {selectArgs = [Left ([(Nothing, "id")], Func1 dummy1)], fromArgs = ["employees"], whereArgs = [(ColumnName (Nothing, "name"), Constant "E", dummy2), (ColumnName (Nothing, "surname"), Constant "E", dummy2)], orderByArgs = []}))
-      {-
+    
   describe "Lib2.executeStatement" $ do
     it "executes a show tables statement" $ do
-      case Lib2.parseStatement "SHOW TABLES;" of 
+      case removeTFromEither (Lib2.parseStatement "SHOW TABLES;") of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right testRes1
     it "executes a show tables statement case insensitively" $ do
-      case Lib2.parseStatement "ShoW TAbLeS;" of 
+      case removeTFromEither (Lib2.parseStatement "ShoW TAbLeS;") of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right testRes1
     it "executes a show table statement" $ do
-      case Lib2.parseStatement "SHOW TABLE employees;" of 
+      case removeTFromEither (Lib2.parseStatement "SHOW TABLE employees;") of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right testRes2
     it "does not execute a show table statement with a case insensitive name" $ do
-      case Lib2.parseStatement "SHOW TABLE emplOyEes;" of
+      case removeTFromEither (Lib2.parseStatement "SHOW TABLE emplOyEes;") of
         Left err -> err `shouldBe` err
         Right ps -> Lib2.executeStatement ps D.database `shouldSatisfy` isLeft
     it "executes a select statement with columns" $ do
-      case Lib2.parseStatement "SELECT id, surname FROM employees;" of 
+      case removeTFromEither (Lib2.parseStatement "SELECT id, surname FROM employees;") of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right testRes3
     it "does not execute a select statement with wrong columns" $ do
-      case Lib2.parseStatement "SELECT id, birthday FROM employees;" of
+      case removeTFromEither (Lib2.parseStatement "SELECT id, birthday FROM employees;") of
         Left err -> err `shouldBe` err
         Right ps -> Lib2.executeStatement ps D.database `shouldSatisfy` isLeft
     it "executes a max function" $ do
-      case Lib2.parseStatement "SELECT MAX(id) FROM employees;" of 
+      case removeTFromEither (Lib2.parseStatement "SELECT MAX(id) FROM employees;") of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                           [[IntegerValue 2]])
     it "executes a sum function" $ do
-      case Lib2.parseStatement "SELECT SUM(id) FROM employees;" of 
+      case removeTFromEither (Lib2.parseStatement "SELECT SUM(id) FROM employees;") of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                           [[IntegerValue 3]])
     it "executes a where or function with strings, = comparison" $ do
-      case Lib2.parseStatement "SELECT * FROM duplicates WHERE x = 'a' OR y = 'a';" of 
+      case removeTFromEither (Lib2.parseStatement "SELECT * FROM duplicates WHERE x = 'a' OR y = 'a';") of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right testRes4
     it "executes a where function with strings, <> comparison" $ do
-      case Lib2.parseStatement "SELECT * FROM duplicates WHERE x <> y;" of 
+      case removeTFromEither (Lib2.parseStatement "SELECT * FROM duplicates WHERE x <> y;") of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right testRes5
     it "executes a where or function with strings, >= comparison" $ do
-      case Lib2.parseStatement "SELECT id FROM employees WHERE 'a' >= 'b' OR name >= 'Z';" of 
+      case removeTFromEither (Lib2.parseStatement "SELECT id FROM employees WHERE 'a' >= 'b' OR name >= 'Z';") of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                         [])
     it "executes a where or function with strings, <= comparison, combined with sum" $ do
-      case Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';" of 
+      case removeTFromEither (Lib2.parseStatement "SElecT SuM(id) FRoM employees wHerE name <= 'E' or surname <= 'E';") of 
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                         [[IntegerValue 2]])
-  -}
+  
   describe "Lib3.deserialize" $ do
     it "deserializes valid table" $ do
       Lib3.deserialize [r|
@@ -356,7 +356,7 @@ main = hspec $ do
       |]
   
   describe "Lib2.parseStatement updated (For task 3)" $ do
-    {-
+    
     it "parses select with columns from multiple tables" $ do
       Lib2.parseStatement "SELECT employees.name, jobs.title, departments.location FROM employees, jobs, departments;" 
       `shouldBe` 
@@ -369,63 +369,71 @@ main = hspec $ do
     it "parses select with columns from multiple tables without specifying table in select" $ do
       Lib2.parseStatement "SELECT name, title, location FROM employees, jobs, departments;" 
       `shouldBe` 
-      Right (SelectStatement {
+      addTtoEither (Right (SelectStatement {
         selectArgs = [Right (Nothing, "name"), Right (Nothing, "title"), Right (Nothing, "location")],
         fromArgs = ["employees", "jobs", "departments"],
-        whereArgs = []})
+        whereArgs = [],
+        orderByArgs = []}))
     it "parses select with columns from multiple tables without some specifying table in select" $ do
       Lib2.parseStatement "SELECT name, jobs.title, location FROM employees, jobs, departments;" 
       `shouldBe` 
-      Right (SelectStatement {
+      addTtoEither (Right (SelectStatement {
         selectArgs = [Right (Nothing, "name"), Right (Just "jobs", "title"), Right (Nothing, "location")],
         fromArgs = ["employees", "jobs", "departments"],
-        whereArgs = []})
+        whereArgs = [],
+        orderByArgs = []}))
     it "parses select with columns from multiple tables inside a function" $ do
       Lib2.parseStatement "SELECT MAX(employees.age), SUM(jobs.id) FROM employees, jobs;" 
       `shouldBe` 
-      Right (SelectStatement {
+      addTtoEither (Right (SelectStatement {
         selectArgs = [Left ([(Just "employees", "age")], Func1 Lib2.max'), Left ([(Just "jobs", "id")], Func1 Lib2.sum')],
         fromArgs = ["employees", "jobs"],
-        whereArgs = []})
+        whereArgs = [],
+        orderByArgs = []}))
     it "parses select with NOW() function" $ do
       Lib2.parseStatement "SELECT NOW() FROM employees;" 
       `shouldBe` 
-      Right (SelectStatement {
+      addTtoEither (Right (SelectStatement {
         selectArgs = [Left ([], Func0 Lib2.now')],
         fromArgs = ["employees"],
-        whereArgs = []})
+        whereArgs = [],
+        orderByArgs = []}))
     it "parses select with NOW() function and other mixed columns" $ do
       Lib2.parseStatement "SELECT NOW(), employees.name, jobs.title FROM employees, jobs;"
       `shouldBe`
-      Right (SelectStatement {
+      addTtoEither (Right (SelectStatement {
         selectArgs = [Left ([], Func0 Lib2.now'), Right (Just "employees", "name"), Right(Just "jobs", "title")],
         fromArgs = ["employees", "jobs"],
-        whereArgs = []})
+        whereArgs = [],
+        orderByArgs = []}))
     it "parses select with where clause" $ do
       Lib2.parseStatement "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.name = jobs.title;"
       `shouldBe`
-      Right (SelectStatement {
+      addTtoEither (Right (SelectStatement {
         selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "title")],
         fromArgs = ["employees", "jobs"],
-        whereArgs = [( ColumnName (Just "employees", "name"), ColumnName (Just "jobs", "title"),  whereEq)]})
+        whereArgs = [( ColumnName (Just "employees", "name"), ColumnName (Just "jobs", "title"),  whereEq)],
+        orderByArgs = []}))
     it "parses select with where OR clause" $ do
       Lib2.parseStatement "SELECT employees.name, jobs.title FROM employees, jobs WHERE employees.name >= jobs.title OR employees.surname <= jobs.title;"
       `shouldBe`
-      Right (SelectStatement {
+      addTtoEither (Right (SelectStatement {
         selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "title")],
         fromArgs = ["employees", "jobs"],
         whereArgs = [
           (ColumnName (Just "employees", "name"), ColumnName (Just "jobs", "title"), whereEq), 
           (ColumnName (Just "employees", "surname"), ColumnName (Just "jobs", "title"),  whereEq)
-        ]})
+        ],
+        orderByArgs = []}))
     it "parses select with where clause and no table names" $ do
       Lib2.parseStatement "SELECT employees.name, jobs.title FROM employees, jobs WHERE name >= title;"
       `shouldBe`
-      Right (SelectStatement {
+      addTtoEither (Right (SelectStatement {
         selectArgs = [Right (Just "employees", "name"), Right (Just "jobs", "title")],
         fromArgs = ["employees", "jobs"],
-        whereArgs = [( ColumnName (Nothing, "name"), ColumnName (Nothing, "title"),  whereEq)]})
--}
+        whereArgs = [( ColumnName (Nothing, "name"), ColumnName (Nothing, "title"),  whereEq)],
+        orderByArgs = []}))
+
     it "parses update with string constant in where" $ do
       Lib2.parseStatement "UPDATE employees SET id = 5, name = 'New Name' WHERE name = 'Old Name';"
       `shouldBe`
@@ -586,7 +594,6 @@ main = hspec $ do
       isLeft
   
   describe "Lib3.executeSql" $ do
-    {-
     it "executes select with columns from multiple tables" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "SELECT employees.name, jobs.title FROM employees, jobs;")
@@ -623,7 +630,6 @@ main = hspec $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "SELECT NOW(), employees.name, jobs.title FROM employees, jobs;")
       df `shouldBe` Right (DataFrame [Column "datetime.datetime" StringType, Column "employees.name" StringType, Column "jobs.title" StringType] [[StringValue "1984-11-28 00:00:00 UTC", StringValue "Vi",StringValue "Assistant"],[StringValue "1984-11-28 00:00:00 UTC", StringValue "Vi",StringValue "Lecturer"],[StringValue "1984-11-28 00:00:00 UTC", StringValue "Ed",StringValue "Assistant"],[StringValue "1984-11-28 00:00:00 UTC", StringValue "Ed",StringValue "Lecturer"]])
-      -}
     it "executes update with string constant in where" $ do
       db <- testSetup
       df <- runExecuteIO db (Lib3.executeSql "UPDATE employees SET id = 42, name = 'New Vi' WHERE name = 'Vi';")
@@ -667,16 +673,6 @@ main = hspec $ do
       df <- runExecuteIO db (Lib3.executeSql "DELETE FROM employees;")
       dbdf <- getTableFromDB db "employees"
       dbdf `shouldBe` Just (DataFrame [Column "id" IntegerType,Column "name" StringType,Column "surname" StringType] [])
-  describe "Testing EitherT" $ do 
-    it "parses delete without where" $ do
-      Lib2.parseStatement "DELETE FROM employees;"
-      `shouldBe`
-       addTtoEither (Right (DeleteStatement {
-        tablename = "employees",
-        whereArgs = []
-      }))
-    it "does not parse an invalid select statement" $ do
-      removeTFromEither (Lib2.parseStatement "SLECT id, birthday FROM employees;") `shouldSatisfy` isLeft
 
 type MemoryDatabase = IORef [(String, String)]
 

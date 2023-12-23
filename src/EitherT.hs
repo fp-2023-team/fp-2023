@@ -72,4 +72,4 @@ removeTFromEither eitherTState = do
     let something = runEitherT eitherTState -- State String (Either ErrorMessage a)
     let somethingelse = runState something "Initial" -- (Either ErrorMessage a, String)
     let final = fst somethingelse
-    final
+    final 
