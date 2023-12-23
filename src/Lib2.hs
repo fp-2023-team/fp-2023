@@ -585,7 +585,7 @@ parseColumnDeclarationList = do
       return (column : parsedDeclarationList)
     ')' -> do
       rem <- lift get
-      _ <- if (rem /= "") then throwE $ "Unexpected " ++ rem ++ " after column declaration list" else return Nothing
+      _ <- if ((removeWhitespace rem) /= ("", ';')) then throwE $ "Unexpected " ++ rem ++ " after column declaration list" else return Nothing
       return [column]
     _   -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ (show column)
 
