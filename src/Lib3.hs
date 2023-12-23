@@ -10,7 +10,9 @@ module Lib3
         deserialize,
         Execution,
         ExecutionAlgebra(..),
-        JSONserializable(..)
+        JSONserializable(..),
+        convertDF,
+        unconvertDF
     )
 where
 
@@ -24,16 +26,18 @@ import Data.ByteString.Lazy.Char8 (pack, unpack)
 import Data.Char
 import Lib2
 import Data.Either (Either(Right))
-import Lib2 (executeStatement)
+import EitherT
+import Control.Monad.Trans.State.Strict
 
 type TableName = String
 type TableContent = String
-type ErrorMessage = String
 
 data ExecutionAlgebra next
     = GetTime (UTCTime -> next)
     | SaveTable TableName TableContent (() -> next)
     | LoadTable TableName (TableContent -> next)
+    | GetTableList ([TableName] -> next)
+    | DeleteTable TableName (() -> next)
     -- feel free to add more constructors here
     deriving Functor
 
@@ -48,22 +52,36 @@ saveTable name content = liftF $ SaveTable name content id
 loadTable :: TableName -> Execution TableContent
 loadTable name = liftF $ LoadTable name id
 
+getTableList :: Execution [TableName]
+getTableList = liftF $ GetTableList id
+
+deleteTable :: TableName -> Execution ()
+deleteTable name = liftF $ DeleteTable name id
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
   parsed <- Pure $ parseStatement sql
-  database <- getRelevantTables ["duplicates", "employees", "flags", "invalid1", "invalid2", "long_strings", "jobs"]
-  time <- getTime
-  executionResult <- case(parsed) of
+  fixedParsed <- 
+    let eitherRes = runState (runEitherT parsed) ""
+    in case (eitherRes) of
+      (Left err, _) -> Pure $ Left err
+      (Right value, _) -> Pure $ Right value
+  executionResult <- case(fixedParsed) of
     Left e -> return $ Left e 
-    Right parsedStmt -> case(database) of
-      Left e -> return $ Left e
-      Right exist -> case findNow parsedStmt of
-        False -> Pure $ executeStatement parsedStmt exist
-        True -> Pure $ executeStatement (changeNow parsedStmt) (timeTable time:exist)
+    Right (SelectStatement a from b c) -> (getRelevantTables from) >>= (executeIfPossible (SelectStatement a from b c))
+    Right (ShowTableStatement a) -> case a of
+      Just table -> (getRelevantTables [table]) >>= (executeIfPossible  (ShowTableStatement a))
+      Nothing -> do
+        allTables <- getTableList
+        (getRelevantTables allTables) >>= (executeIfPossible (ShowTableStatement a))
+    Right (UpdateStatement table a b) -> (getRelevantTables [table]) >>= (executeIfPossible  (UpdateStatement table a b))
+    Right (InsertIntoStatement table a b) -> (getRelevantTables [table]) >>= (executeIfPossible  (InsertIntoStatement table a b))
+    Right (DeleteStatement table a) -> (getRelevantTables [table]) >>= (executeIfPossible  (DeleteStatement table a))
+    Right (CreateTableStatement table a) -> (fmap (Right) $ fmap (maybe [] (:[])) (maybeGetTable table)) >>= (executeIfPossible  (CreateTableStatement table a))
+    Right (DropTableStatement table) -> (getRelevantTables [table]) >>= (executeIfPossible  (DropTableStatement table))
   case (executionResult) of
     Left e -> return $ Left e
-    Right result -> case (parsed) of
-      Right (SelectStatement _ _ _) -> return $ Right result
+    Right result -> case (fixedParsed) of
+      Right (SelectStatement _ _ _ _) -> return $ Right result
       Right (ShowTableStatement _) -> return $ Right result
       Right (InsertIntoStatement tablename _ _) -> do 
         persistTable tablename result
@@ -73,6 +91,12 @@ executeSql sql = do
         return $ Right result
       Right (DeleteStatement tablename _) -> do
         persistTable tablename result
+        return $ Right result
+      Right (CreateTableStatement tablename _) -> do
+        persistTable tablename result
+        return $ Right result
+      Right (DropTableStatement tablename) -> do
+        deleteTable tablename
         return $ Right result
 
 getRelevantTables :: [TableName] -> Execution (Either ErrorMessage [(TableName, DataFrame)])
@@ -93,16 +117,24 @@ persistTable name duom = do
   serial <- Pure $ serialize duom
   saveTable name serial
 
+maybeGetTable :: TableName -> Execution (Maybe (TableName, DataFrame))
+maybeGetTable name = do
+  table <- loadTable name
+  case deserialize table of
+    Nothing -> return $ Nothing
+    Just a -> return $ Just (name, a)
+
 getTable :: TableName -> Execution (Either ErrorMessage (TableName, DataFrame))
 getTable name = do
-  table <- loadTable name
-  deserializedTable1 <- Pure $ deserialize table 
-  case (deserializedTable1) of
-    Nothing -> return $ Left $ "Failed to deserialize table \"" ++ name ++ "\""
-    Just a -> Pure $ Right (name, a)
+  namedTable <- maybeGetTable name
+  case (namedTable) of
+    Nothing -> return $ Left $ "Failed to fetch table \"" ++ name ++ "\""
+    Just a -> return $ Right a
+
+
 
 findNow :: ParsedStatement -> Bool
-findNow (SelectStatement a _ _) = findNow' a
+findNow (SelectStatement a _ _ _) = findNow' a
   where
     findNow' :: [Either ([(Maybe String, String)], Lib2.Function) (Maybe String, String)] -> Bool
     findNow' [] = False
@@ -115,12 +147,20 @@ timeTable :: UTCTime -> (TableName, DataFrame)
 timeTable time = ("datetime", DataFrame [(Column "datetime" StringType)] [[StringValue $ show time]])
 
 changeNow :: ParsedStatement -> ParsedStatement
-changeNow (SelectStatement a b c) = (SelectStatement (map changeNow' a) ("datetime":b) c)
+changeNow (SelectStatement a b c d) = (SelectStatement (map changeNow' a) ("datetime":b) c d)
   where
     changeNow' :: Either ([(Maybe String, String)], Lib2.Function) (Maybe String, String) -> Either ([(Maybe String, String)], Lib2.Function) (Maybe String, String)
     changeNow' (Left (_, Func0 _)) = Right (Just "datetime", "datetime")
     changeNow' other = other
 changeNow notSelect = notSelect
+
+executeIfPossible ::  ParsedStatement -> Either ErrorMessage [(TableName, DataFrame)] -> Execution (Either ErrorMessage DataFrame)
+executeIfPossible stmt (Left err) = return $ Left err
+executeIfPossible stmt (Right database)= case findNow stmt of
+  False -> Pure $ executeStatement stmt database
+  True -> do
+    time <- getTime
+    Pure $ executeStatement (changeNow stmt) (timeTable time:database)
   
 class JSONserializable a where
   serialize :: a -> String

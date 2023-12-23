@@ -19,7 +19,8 @@ import System.Console.Repline
   )
 import System.Console.Terminal.Size (Window, size, width)
 import Control.Applicative (liftA)
-import qualified Lib2
+import Control.Exception
+import System.Directory
 
 type Repl a = HaskelineT IO a
 
@@ -69,5 +70,29 @@ runExecuteIO (Free step) = do
         -- probably you will want to extend the interpreter
         runStep :: Lib3.ExecutionAlgebra a -> IO a
         runStep (Lib3.GetTime next) = getCurrentTime >>= return . next
-        runStep (Lib3.SaveTable name content next) = writeFile ("./db/" ++ name ++ ".json") content >>= return . next
-        runStep (Lib3.LoadTable name next) = readFile ("./db/" ++ name ++ ".json") >>= return . next
+        runStep (Lib3.SaveTable name content next) = (catch (writeFile ("./db/" ++ name ++ ".json") content) failedSave) >>= return . next
+        runStep (Lib3.LoadTable name next) = (catch (readFile ("./db/" ++ name ++ ".json")) fileNotFound) >>= return . next
+        runStep (Lib3.GetTableList next) = ((catch (listDirectory "./db/") noFilesFound) >>= return . (fmap cutJSON)) >>= return . next
+        runStep (Lib3.DeleteTable name next) = (catch (removeFile $ "./db/" ++ name ++ ".json") (failedDelete name)) >>= return . next
+
+fileNotFound :: SomeException -> IO String
+fileNotFound _ = return "Table not found"
+
+noFilesFound :: SomeException -> IO [String]
+noFilesFound _ = return []
+
+failedSave :: SomeException -> IO ()
+failedSave _ = do
+  putStrLn "Error: failed to save!"
+  return ()
+
+
+failedDelete :: String -> SomeException -> IO ()
+failedDelete tableName _ = do
+  putStrLn $ "Error: failed to delete table '" ++ tableName ++ "'!"
+  return ()
+
+cutJSON :: String -> String
+cutJSON [] = []
+cutJSON ".json" = []
+cutJSON (x:xs) = (x:cutJSON xs)

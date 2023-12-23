@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       DataFrame
+      EitherT
       InMemoryTables
       Lessons.Lesson01
       Lessons.Lesson02
@@ -62,15 +63,21 @@ executable fp2023-manipulate
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
+    , async
     , base >=4.7 && <5
     , bytestring
+    , directory
     , extra
     , fp2023
     , free
+    , happstack-server
     , json
     , repline
+    , stm
     , terminal-size
     , time
+    , transformers
+    , yaml
   default-language: Haskell2010
 
 executable fp2023-select-all
@@ -107,6 +114,55 @@ executable fp2023-select-more
     , terminal-size
   default-language: Haskell2010
 
+executable fp2023-server
+  main-is: Main.hs
+  other-modules:
+      Paths_fp2023
+  hs-source-dirs:
+      app4server
+  default-extensions:
+      ImportQualifiedPost
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , async
+    , base >=4.7 && <5
+    , bytestring
+    , directory
+    , extra
+    , fp2023
+    , free
+    , happstack-server
+    , json
+    , repline
+    , stm
+    , terminal-size
+    , time
+    , transformers
+    , yaml
+  default-language: Haskell2010
+
+executable fp2023-sql-client
+  main-is: Main.hs
+  other-modules:
+      Paths_fp2023
+  hs-source-dirs:
+      sql-client
+  default-extensions:
+      ImportQualifiedPost
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      HTTP
+    , base >=4.7 && <5
+    , bytestring
+    , extra
+    , fp2023
+    , repline
+    , terminal-size
+    , uri-encode
+    , yaml
+  default-language: Haskell2010
+
 test-suite fp2023-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
@@ -124,4 +180,5 @@ test-suite fp2023-test
     , hspec
     , raw-strings-qq
     , time
+    , transformers
   default-language: Haskell2010
