@@ -64,3 +64,4 @@ throwE err = EitherT $ return $ Left err
 addTtoEither :: Either ErrorMessage a -> EitherT ErrorMessage (State String) a
 addTtoEither (Left e) = throwE e
 addTtoEither (Right a) = pure a
+

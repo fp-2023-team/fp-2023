@@ -180,4 +180,5 @@ test-suite fp2023-test
     , hspec
     , raw-strings-qq
     , time
+    , transformers
   default-language: Haskell2010
