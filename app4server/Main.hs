@@ -93,6 +93,9 @@ handleRequest state = do
                         getTables state' = do
                             curState <- readTVar state'
                             return $ fmap fst curState
+                runStep (Lib3.DeleteTable name next) = (atomically $ deleteTable state name) >>= return . next
+                    where
+                        deleteTable ::  
 
 main :: IO ()
 main = do
