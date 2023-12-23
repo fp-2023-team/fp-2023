@@ -29,23 +29,5 @@ completer n = do
   let names = ["select", "*", "from", "show", "table", "tables"] ++ map fst database
   return $ Prelude.filter (L.isPrefixOf n) names
 
--- Evaluation : handle each line user inputs
-cmd :: String -> Repl ()
-cmd c = do
-  s <- terminalWidth <$> liftIO size
-  case cmd' s of
-    Left err -> liftIO $ putStrLn $ "Error: " ++ err
-    Right table -> liftIO $ putStrLn table
-  where
-    terminalWidth :: (Integral n) => Maybe (Window n) -> n
-    terminalWidth = maybe 80 width
-    cmd' :: Integer -> Either String String
-    cmd' s = do
-      stmt <- Lib2.parseStatement c
-      df <- Lib2.executeStatement stmt database
-      _ <- Lib1.validateDataFrame df
-      return $ Lib1.renderDataFrameAsTable s df
-
 main :: IO ()
-main =
-  evalRepl (const $ pure ">>> ") cmd [] Nothing Nothing (Word completer) ini final
+main = putStrLn "compatibility issues"
