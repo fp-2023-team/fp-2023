@@ -529,6 +529,9 @@ parseValue = do
                | parseCompare word "true" -> do
                   lift $ put remainder
                   return (BoolValue True, sym)
+               | parseCompare word "false" -> do
+                  lift $ put remainder
+                  return (BoolValue False, sym)
                | isNumber word -> do
                   lift $ put remainder
                   return (IntegerValue $ getNumber word, sym)
@@ -663,6 +666,7 @@ parseConstantList = do
         tempSym | elem tempSym ",)"  -> case (parsedWord) of
                   word | parseCompare word "null" -> return (NullValue, sym, remainder)
                        | parseCompare word "true" -> return (BoolValue True, sym, remainder)
+                       | parseCompare word "false" -> return (BoolValue False, sym, remainder)
                        | isNumber word -> return (IntegerValue $ getNumber word, sym, remainder)
                        | otherwise -> throwE $ "Unrecognised value: " ++ word
         otherwise -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ parsedWord
