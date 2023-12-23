@@ -93,6 +93,18 @@ handleRequest state = do
                         getTables state' = do
                             curState <- readTVar state'
                             return $ fmap fst curState
+                runStep (Lib3.DeleteTable name next) = (deleteTable state name) >>= return . next
+                    where
+                        deleteTable :: TVar [(String, b)] -> String -> IO ()
+                        deleteTable state' tablename = do
+                            fileExist <- doesFileExist $ "./db/" ++ tablename ++ ".json"
+                            _ <- case (fileExist) of
+                                True -> return Nothing
+                                False -> error $ "File " ++ "./db/" ++ tablename ++ ".json" ++ " does not exist"
+                            removeFile $ "./db/" ++ tablename ++ ".json"
+                            database <- return loadTablesFromDirectory
+                            state' <- newTVarIO database
+                            return ()
 
 main :: IO ()
 main = do

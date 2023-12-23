@@ -37,6 +37,7 @@ data ExecutionAlgebra next
     | SaveTable TableName TableContent (() -> next)
     | LoadTable TableName (TableContent -> next)
     | GetTableList ([TableName] -> next)
+    | DeleteTable TableName (() -> next)
     -- feel free to add more constructors here
     deriving Functor
 
@@ -53,6 +54,9 @@ loadTable name = liftF $ LoadTable name id
 
 getTableList :: Execution [TableName]
 getTableList = liftF $ GetTableList id
+
+deleteTable :: TableName -> Execution ()
+deleteTable name = liftF $ DeleteTable name id
 
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
@@ -88,6 +92,9 @@ executeSql sql = do
         return $ Right result
       Right (DeleteStatement tablename _) -> do
         persistTable tablename result
+        return $ Right result
+      Right (DropTableStatement tablename) -> do
+        deleteTable tablename
         return $ Right result
 
 getRelevantTables :: [TableName] -> Execution (Either ErrorMessage [(TableName, DataFrame)])
