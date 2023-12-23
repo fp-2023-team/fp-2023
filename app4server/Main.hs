@@ -29,7 +29,7 @@ import qualified Data.Yaml as Yaml
 
 saveLoop :: TVar [(String, String)] -> IO ()
 saveLoop state = do
-    threadDelay $ 1000 * 1000
+    threadDelay $ 4 * 1000 * 1000
     _ <- putStrLn $ "Saving..."
     curState <- readTVarIO state
     _ <- save curState
@@ -108,8 +108,8 @@ handleRequest state = do
                                 then putStrLn $ "File " ++ "./db/" ++ tablename ++ ".json" ++ " does not exist"
                                 else do
                                     removeFile $ "./db/" ++ tablename ++ ".json"
-                                    database <- return loadTablesFromDirectory
-                                    state' <- newTVarIO database
+                                    database <- loadTablesFromDirectory "./db/"
+                                    _ <- atomically $ writeTVar state database
                                     return ()
 
 main :: IO ()
