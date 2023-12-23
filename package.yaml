@@ -148,3 +148,4 @@ tests:
       - raw-strings-qq
       - free
       - time
+      - transformers
