@@ -1098,12 +1098,12 @@ executeStatement (DeleteStatement tableName' whereArgs') database' = do
                         Just (StringValue val) -> val
 executeStatement (CreateTableStatement tablename' columns') database' = do
     _ <- guardCheck (not $ null $ lookup tablename' database')
-        $ "Table by name " ++ tablename' ++ " already exists"
+        $ "Table by name '" ++ tablename' ++ "' already exists"
     _ <- guardCheck (null columns') $ "Cannot create table with no columns"
     Right $ DataFrame columns' []
 executeStatement (DropTableStatement tablename') database' = do
     _ <- guardCheck (null $ lookup tablename' database')
-        $ "Table by name " ++ tablename' ++ " does not exist"
+        $ "Table by name '" ++ tablename' ++ "' does not exist"
     executeStatement
         (ShowTableStatement Nothing)
         [table | table@(tableName'', _) <- database', tableName'' /= tablename']
