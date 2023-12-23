@@ -381,14 +381,18 @@ parseWhereArgs = do
                                   parseRes <- parseWhereArgs'
                                   return $ (a, Constant x1, func) : parseRes
                                 else throwE $ "Missing statement after " ++ x2
-                              | otherwise -> throwE $ "Unrecognised statement: " ++ x1
+                              | otherwise -> do
+                                lift $ put xs1
+                                return $ [(a, Constant x1, func)]
               (x2, '\'', xs2) | parseCompare x2 "or" -> if (xs2 /= "")
                                 then do
                                   lift $ put $ '\'':xs2 
                                   parseRes <- parseWhereArgs'
                                   return $ (a, Constant x1, func) : parseRes
                                 else throwE $ "Missing statement after " ++ x2
-                              | otherwise -> throwE $ "Unrecognised statement: " ++ x1
+                              | otherwise -> do
+                                lift $ put $ xs1
+                                return $ [(a, Constant x1, func)]
               (x2, sym, _) -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ x2
           | otherwise -> throwE $ "Unexpected \' after " ++ x  
         (x, ';', xs) | x /= "" ->  do
@@ -397,6 +401,7 @@ parseWhereArgs = do
                       return $ [(a, ColumnName fullName, func)]
                     | otherwise -> throwE "Missing second operand"
         (x, ' ', xs) -> do
+          lift $ put xs
           x1 <- parseKeyword
           xs1 <- lift get
           if (parseCompare x1 "or")
@@ -406,7 +411,10 @@ parseWhereArgs = do
                 fullName <- addTtoEither $ parseFullCollumnName x
                 return $ (a, ColumnName fullName, func) : parseRes
               else throwE $ "Missing statement after " ++ x1 
-            else throwE $ "Unrecognised statement: " ++ x1
+            else do
+              fullName <- addTtoEither $ parseFullCollumnName x
+              lift $ put xs
+              return $ [(a, ColumnName fullName, func)]
         (x, sym, _) -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ x
 
 parseInsert :: EitherT ErrorMessage (State String) ParsedStatement
@@ -458,7 +466,7 @@ parseUpdate = do
         ' ' -> do
           parseRes <- parseWhereArgs
           leftover <- lift get
-          _ <- if (parseRes == [] && leftover /= "") then throwE "Unrecognised keyword at the end of the statement" else return Nothing
+          _ <- if (leftover /= "") then throwE "Unrecognised keyword at the end of the statement" else return Nothing
           return $ UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues, whereArgs = parseRes}
         ';' -> return $ UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues, whereArgs = []}
         otherwise -> throwE $ "Unexpected " ++ [termChar] ++ " after values assignment"
@@ -521,6 +529,9 @@ parseValue = do
                | parseCompare word "true" -> do
                   lift $ put remainder
                   return (BoolValue True, sym)
+               | parseCompare word "false" -> do
+                  lift $ put remainder
+                  return (BoolValue False, sym)
                | isNumber word -> do
                   lift $ put remainder
                   return (IntegerValue $ getNumber word, sym)
@@ -541,7 +552,7 @@ parseDelete = do
         ' ' -> do
           parsedWhereArgs <- parseWhereArgs
           leftover <- lift get
-          _ <- if (parsedWhereArgs == [] && leftover /= "") then throwE "Unrecognised keyword at the end of the statement" else return Nothing
+          _ <- if (leftover /= "") then throwE "Unrecognised keyword at the end of the statement" else return Nothing
           return $ DeleteStatement {tablename = parsedTablename, whereArgs = parsedWhereArgs}
         ';' -> return $ DeleteStatement {tablename = parsedTablename, whereArgs = []}
         otherwise -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ parsedTablename
@@ -655,6 +666,7 @@ parseConstantList = do
         tempSym | elem tempSym ",)"  -> case (parsedWord) of
                   word | parseCompare word "null" -> return (NullValue, sym, remainder)
                        | parseCompare word "true" -> return (BoolValue True, sym, remainder)
+                       | parseCompare word "false" -> return (BoolValue False, sym, remainder)
                        | isNumber word -> return (IntegerValue $ getNumber word, sym, remainder)
                        | otherwise -> throwE $ "Unrecognised value: " ++ word
         otherwise -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ parsedWord
@@ -805,30 +817,30 @@ parseCompare _ _ = False
 -- Executes a parsed statemet with the given database. Produces a DataFrame.
 executeStatement :: ParsedStatement -> [(TableName, DataFrame)] -> Either ErrorMessage DataFrame
 executeStatement statement@(SelectStatement selectArgs' tableNames' whereArgs' orderByArgs') database' = do
-    --_ <- guardCheck (True) (show statement)
     _ <- guardCheck (null selectArgs')
         $ "Zero columns in 'select'"
     _ <- guardCheck (any (isLeft) selectArgs' && anyRight selectArgs')
         $ "Cannot use both functions and select columns in 'select'"
     usedTables <- getUsedTables tableNames' database'
+    _ <- traverse validateDataFrame [table | (_, table) <- usedTables]
     _ <- guardCheck (null usedTables)
         $ "No tables in 'from'"
     let allNamedCols = [((Just name, colName), col) | (name, DataFrame cols _) <- usedTables, col@(Column colName _) <- cols]
-    _ <- checkTableColsWithWhereColNames allNamedCols whereArgs'
     let namedHell = map (createNamedRows) usedTables
     let cartesianHell = listCartesianProduct namedHell
-    let filteredCartesianHell = filterByWhere cartesianHell whereArgs'
+    filteredCartesianHell <- filterByWhere cartesianHell whereArgs' allNamedCols
+    orderedCartesianHell <- orderBy filteredCartesianHell orderByArgs' allNamedCols
     case selectArgs' of
         Right (Nothing, "*"):[] -> Right $ DataFrame
             (case usedTables of
                 (_, DataFrame cols _):[] -> cols
                 _ -> [Column (tableName ++ "." ++ colName) colType
                     | (tableName, DataFrame cols _) <- usedTables, Column colName colType <- cols])
-            (map (map snd) filteredCartesianHell)
+            (map (map snd) orderedCartesianHell)
         Right (Just _, "*"):_ -> Left $ "Wildcard selector must be used without table name in 'select'"
         Right (_, "*"):xs -> Left $ "Wildcard selector must be used by itself in 'select'"
         _ -> do
-            colValues <- Right $ if (null filteredCartesianHell)
+            colValues <- Right $ if (null orderedCartesianHell)
                 then [(((tableName, colName), colType), [])
                         | (tableName, DataFrame cols _) <- usedTables,
                             Column colName colType <- cols]
@@ -836,16 +848,12 @@ executeStatement statement@(SelectStatement selectArgs' tableNames' whereArgs' o
                     [((tableName, colName), colType)
                         | (tableName, DataFrame cols _) <- usedTables,
                             Column colName colType <- cols]
-                    (transpose $ map (map snd) filteredCartesianHell))
+                    (transpose $ map (map snd) orderedCartesianHell))
             selectedColumnValues <- applySelectArgs colValues selectArgs'
             Right $ DataFrame
                 [Column ((maybe "" (++ ".") tableName) ++ colName) colType
                     | (((tableName, colName), colType), _) <- selectedColumnValues]
                 (transpose [values | (_, values) <- selectedColumnValues])
-            --Right $ DataFrame
-            --    [Column ((maybe "" (++ ".") tableName) ++ colName) colType
-            --        | ((tableName, colName), colType, _) <- selectedColumnValues]
-            --    [values | (_, _, values) <- selectedColumnValues]
     where
         isStringColumn :: Column -> Bool
         isStringColumn (Column _ StringType) = True
@@ -872,13 +880,14 @@ executeStatement statement@(SelectStatement selectArgs' tableNames' whereArgs' o
         checkTableColsWithWhereColNames tableNamedCols whereOps =
             forEach (\whereColName acc -> if null acc
                 then acc
-                else (case findAllByFunc
+                else (case findAllBy
                         (\(tableColName, colName) -> case whereColName of
                             (Nothing, name) -> colName == name
                             (tableName, name) -> tableColName == tableName && colName == name)
                         tableNamedCols of
                         [] -> Left $ "Column " ++ show whereColName ++ " does not exist"
-                        x:[] -> guardCheck (not $ isStringColumn x) $ "Column " ++ show whereColName ++ "is not of string type"
+                        x:[] -> guardCheck (not $ isStringColumn x)
+                            $ "Column " ++ show whereColName ++ "is not of string type"
                         x:xs -> Left $ "Column " ++ show whereColName ++ " matched in more than one table"))
                 allWhereColNames (Right ())
             where
@@ -886,8 +895,11 @@ executeStatement statement@(SelectStatement selectArgs' tableNames' whereArgs' o
                     ++ [operand | (ColumnName operand, _, _) <- whereOps]
         filterByWhere :: [[((Maybe String, String), Value)]]
             -> [(WhereOperand, WhereOperand, WhereOperator)]
-            -> [[((Maybe String, String), Value)]]
-        filterByWhere namedRows ops = [namedRow | namedRow <- namedRows, executeWhere namedRow ops]
+            -> [((Maybe TableName, String), Column)]
+            -> Either ErrorMessage [[((Maybe String, String), Value)]]
+        filterByWhere namedRows ops allNamedCols = do
+            _ <- checkTableColsWithWhereColNames allNamedCols whereArgs'
+            Right $ [namedRow | namedRow <- namedRows, executeWhere namedRow ops]
             where
                 executeWhere :: [((Maybe String, String), Value)]
                     -> [(WhereOperand, WhereOperand, WhereOperator)]
@@ -901,17 +913,59 @@ executeStatement statement@(SelectStatement selectArgs' tableNames' whereArgs' o
                         getValue :: WhereOperand -> String
                         getValue x = case x of
                             Constant str -> str
-                            ColumnName (maybeOpTableName, opColName) -> case findAllByFunc
+                            ColumnName (maybeOpTableName, opColName) -> case findAllBy
                                 (\(maybeTableName, colName) -> case maybeOpTableName of
                                     Nothing -> opColName == colName
                                     Just _ -> maybeOpTableName == maybeTableName && opColName == colName)
                                 namedRow of
                                 (StringValue value):[] -> value
                                 _ -> ""
+        orderBy :: [[((Maybe String, String), Value)]]
+            -> [((Maybe String, String), Bool)]
+            -> [((Maybe TableName, String), Column)]
+            -> Either ErrorMessage [[((Maybe String, String), Value)]]
+        orderBy cartHell [] _ = Right $ cartHell
+        orderBy cartHell orderings tableNamedCols = do
+            _ <- forEach (\orderByColName acc -> if null acc
+                    then acc
+                    else (case findAllBy
+                            (\(tableColName, colName) -> case orderByColName of
+                                (Nothing, name) -> colName == name
+                                (tableName, name) -> tableColName == tableName && colName == name)
+                            tableNamedCols of
+                            [] -> Left $ "Column " ++ show orderByColName ++ " does not exist"
+                            x:[] -> Right ()
+                            x:xs -> Left $ "Column " ++ show orderByColName ++ " matched in more than one table"))
+                    allOrderByColNames (Right ())
+            Right $ sortBy executeOrdering cartHell
+            where
+                allOrderByColNames :: [(Maybe String, String)]
+                allOrderByColNames = [x | (x, _) <- orderings]
+                executeOrdering :: [((Maybe String, String), Value)]
+                    -> [((Maybe String, String), Value)]
+                    -> Ordering
+                executeOrdering x y = forEach (\((tableName, colName), isAsc) acc -> case acc of
+                    EQ -> case findBy (findValue (tableName, colName)) x of
+                        Nothing -> EQ
+                        Just xValue -> case findBy (findValue (tableName, colName)) y of
+                            Nothing -> EQ
+                            Just yValue -> if isAsc
+                                then compare xValue yValue
+                                else compare yValue xValue
+                    _ -> acc) orderings EQ
+                    where
+                        findValue :: (Maybe String, String)
+                            -> (Maybe String, String)
+                            -> Bool
+                        findValue needle@(needleTableName, needleColName)
+                            (hayTableName, hayColName) = case needle of
+                                (Nothing, needleColName)
+                                    -> needleColName == hayColName
+                                (Just _, needleColName)
+                                    -> needleTableName == hayTableName && needleColName == hayColName
         applySelectArgs :: [(((TableName, String), ColumnType), [Value])]
             -> [Either ([(Maybe TableName, String)], Function) (Maybe TableName, String)]
             -> Either ErrorMessage [(((Maybe TableName, String), ColumnType), [Value])]
-        --applySelectArgs columnsWithValues selects = Right $ [(((Just tableName, colName), colType), values) | (((tableName, colName), colType), values) <- columnsWithValues]
         applySelectArgs columnsWithValues selects = case [val | (Right val) <- selects] of
             [] -> do
                 let selectWithFuncs = [val | (Left val) <- selects]
@@ -996,7 +1050,6 @@ executeStatement (UpdateStatement tableName' assignedValues' whereArgs') databas
                     ColumnName (_, str) -> case lookup str namedRows of
                         Just (StringValue val) -> val
                         _ -> ""
-    --Left $ "Update statement unsupported"
 executeStatement (InsertIntoStatement tableName' valuesOrder' values') database' = do
     table@(DataFrame cols rows) <- maybe (Left $ "Could not find table " ++ tableName')
         (Right)
@@ -1046,6 +1099,17 @@ executeStatement (DeleteStatement tableName' whereArgs') database' = do
                     Constant str -> str
                     ColumnName (_, str) -> case lookup str namedRows of
                         Just (StringValue val) -> val
+executeStatement (CreateTableStatement tablename' columns') database' = do
+    _ <- guardCheck (not $ null $ lookup tablename' database')
+        $ "Table by name '" ++ tablename' ++ "' already exists"
+    _ <- guardCheck (null columns') $ "Cannot create table with no columns"
+    Right $ DataFrame columns' []
+executeStatement (DropTableStatement tablename') database' = do
+    _ <- guardCheck (null $ lookup tablename' database')
+        $ "Table by name '" ++ tablename' ++ "' does not exist"
+    executeStatement
+        (ShowTableStatement Nothing)
+        [table | table@(tableName'', _) <- database', tableName'' /= tablename']
 executeStatement _ _ = Left $ "Unknown unsupported statement"
 
 nullOrAny :: (Foldable t) => (a -> Bool) -> t a -> Bool
@@ -1104,8 +1168,13 @@ listCartesianProduct (x:xs) = listCartesianProduct' xs x
 decomposeListList :: [[a]] -> [a]
 decomposeListList xss = [x | xs <- xss, x <- xs]
 
-findAllByFunc :: (a -> Bool) -> [(a, b)] -> [b]
-findAllByFunc needleFunc haystack = [value | (key, value) <- haystack, needleFunc key]
+findAllBy :: (a -> Bool) -> [(a, b)] -> [b]
+findAllBy needleFunc haystack = [value | (key, value) <- haystack, needleFunc key]
+
+findBy :: (a -> Bool) -> [(a, b)] -> Maybe b
+findBy needleFunc haystack = case findAllBy needleFunc haystack of
+    [] -> Nothing
+    x:_ -> Just x
 
 filterAllBy :: (a -> Bool) -> [(a, b)] -> [(a, b)]
 filterAllBy needleFunc haystack = [(key, value) | (key, value) <- haystack, needleFunc key]
@@ -1157,7 +1226,7 @@ instance Show Function where
   show (Func1 _) = " MAX(something) or SUM(something) "
 
 instance Show WhereOperator where
-  show _ = "(=, OR)"
+  show _ = "(= | <> | <= | >=, OR)"
 
 instance Show ParsedStatement where
   show (SelectStatement sa fa wa oba) = "SelectStatement: "

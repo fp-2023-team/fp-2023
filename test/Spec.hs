@@ -850,6 +850,7 @@ runExecuteIO memoryDB (Free step) = do
             Nothing -> return "" >>= return . next
         runStep (Lib3.GetTableList next) = readIORef memoryDB >>= (return . next) . (fmap fst)
 
+
 getTableFromDB :: MemoryDatabase -> String -> IO (Maybe DataFrame)
 getTableFromDB ref name = do
   a <- readIORef ref

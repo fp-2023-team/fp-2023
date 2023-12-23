@@ -14,6 +14,7 @@ import Data.Time ( UTCTime, getCurrentTime )
 import qualified Data.ByteString.Internal as ByteString.Internal
 
 import System.Directory
+import System.IO
 
 import Happstack.Server
 
@@ -28,9 +29,10 @@ import qualified Data.Yaml as Yaml
 
 saveLoop :: TVar [(String, String)] -> IO ()
 saveLoop state = do
-    threadDelay $ 5 * 1000 * 1000
+    threadDelay $ 4 * 1000 * 1000
+    _ <- putStrLn $ "Saving..."
     curState <- readTVarIO state
-    seq (save curState) (return ())
+    _ <- save curState
     saveLoop state
     where
         save :: [(String, String)] -> IO ()
@@ -50,7 +52,7 @@ loadTablesFromDirectory dirPath = do
         loadTablesFromList :: [FilePath] -> IO [(String, String)] -> IO [(String, String)]
         loadTablesFromList [] acc = acc
         loadTablesFromList (fileName:fileNames) acc = do
-            fileContents <- readFile $ dirPath ++ "/" ++ fileName
+            fileContents <- readFile' $ dirPath ++ "/" ++ fileName
             let _:_:_:_:_:reversedTableName = reverse fileName
             let tableName = reverse reversedTableName
             loadTablesFromList fileNames (fmap ((:) (tableName, fileContents)) acc)
@@ -60,8 +62,12 @@ handleRequest state = do
     statementStr <- look "statement"
     executionResult <- lift $ runExecuteIO $ Lib3.executeSql statementStr
     case executionResult of
-        Left err -> badRequest err
-        Right dataframe -> ok $ ByteString.Internal.unpackChars $ Yaml.encode $ convertDF dataframe
+        Left err -> do
+            _ <- lift $ putStrLn $ "Error: " ++ err
+            badRequest err
+        Right dataframe -> do
+            _ <- lift $ putStrLn $ "Info: successfully parsed '" ++ statementStr ++ "'"
+            ok $ ByteString.Internal.unpackChars $ Yaml.encode $ convertDF dataframe
     where
         runExecuteIO :: Lib3.Execution r -> IO r
         runExecuteIO (Pure r) = return r
@@ -81,11 +87,11 @@ handleRequest state = do
                                 $ newValue:[value | value@(name', _) <- curState, name' /= newName]
                 runStep (Lib3.LoadTable name next) = (atomically $ lookupState state name) >>= return . next
                     where
-                        lookupState :: TVar [(String, b)] -> String -> STM b
+                        lookupState :: TVar [(String, String)] -> String -> STM String
                         lookupState state' needle = do
                             curState <- readTVar state'
                             case lookup needle curState of
-                                Nothing -> error $ "Could not find table " ++ name
+                                Nothing -> return ""
                                 Just x -> return x
                 runStep (Lib3.GetTableList next) = (atomically $ getTables state) >>= return . next
                     where
@@ -93,6 +99,18 @@ handleRequest state = do
                         getTables state' = do
                             curState <- readTVar state'
                             return $ fmap fst curState
+                runStep (Lib3.DeleteTable name next) = (deleteTable state name) >>= return . next
+                    where
+                        deleteTable :: TVar [(String, b)] -> String -> IO ()
+                        deleteTable state' tablename = do
+                            fileExist <- doesFileExist $ "./db/" ++ tablename ++ ".json"
+                            if not fileExist
+                                then putStrLn $ "File " ++ "./db/" ++ tablename ++ ".json" ++ " does not exist"
+                                else do
+                                    removeFile $ "./db/" ++ tablename ++ ".json"
+                                    database <- loadTablesFromDirectory "./db/"
+                                    _ <- atomically $ writeTVar state database
+                                    return ()
 
 main :: IO ()
 main = do

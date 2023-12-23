@@ -37,6 +37,7 @@ data ExecutionAlgebra next
     | SaveTable TableName TableContent (() -> next)
     | LoadTable TableName (TableContent -> next)
     | GetTableList ([TableName] -> next)
+    | DeleteTable TableName (() -> next)
     -- feel free to add more constructors here
     deriving Functor
 
@@ -54,6 +55,8 @@ loadTable name = liftF $ LoadTable name id
 getTableList :: Execution [TableName]
 getTableList = liftF $ GetTableList id
 
+deleteTable :: TableName -> Execution ()
+deleteTable name = liftF $ DeleteTable name id
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
   parsed <- Pure $ parseStatement sql
@@ -73,7 +76,7 @@ executeSql sql = do
     Right (UpdateStatement table a b) -> (getRelevantTables [table]) >>= (executeIfPossible  (UpdateStatement table a b))
     Right (InsertIntoStatement table a b) -> (getRelevantTables [table]) >>= (executeIfPossible  (InsertIntoStatement table a b))
     Right (DeleteStatement table a) -> (getRelevantTables [table]) >>= (executeIfPossible  (DeleteStatement table a))
-    Right (CreateTableStatement table a) -> (getRelevantTables [table]) >>= (executeIfPossible  (CreateTableStatement table a))
+    Right (CreateTableStatement table a) -> (fmap (Right) $ fmap (maybe [] (:[])) (maybeGetTable table)) >>= (executeIfPossible  (CreateTableStatement table a))
     Right (DropTableStatement table) -> (getRelevantTables [table]) >>= (executeIfPossible  (DropTableStatement table))
   case (executionResult) of
     Left e -> return $ Left e
@@ -88,6 +91,12 @@ executeSql sql = do
         return $ Right result
       Right (DeleteStatement tablename _) -> do
         persistTable tablename result
+        return $ Right result
+      Right (CreateTableStatement tablename _) -> do
+        persistTable tablename result
+        return $ Right result
+      Right (DropTableStatement tablename) -> do
+        deleteTable tablename
         return $ Right result
 
 getRelevantTables :: [TableName] -> Execution (Either ErrorMessage [(TableName, DataFrame)])
@@ -108,13 +117,21 @@ persistTable name duom = do
   serial <- Pure $ serialize duom
   saveTable name serial
 
+maybeGetTable :: TableName -> Execution (Maybe (TableName, DataFrame))
+maybeGetTable name = do
+  table <- loadTable name
+  case deserialize table of
+    Nothing -> return $ Nothing
+    Just a -> return $ Just (name, a)
+
 getTable :: TableName -> Execution (Either ErrorMessage (TableName, DataFrame))
 getTable name = do
-  table <- loadTable name
-  deserializedTable1 <- Pure $ deserialize table 
-  case (deserializedTable1) of
+  namedTable <- maybeGetTable name
+  case (namedTable) of
     Nothing -> return $ Left $ "Failed to fetch table \"" ++ name ++ "\""
-    Just a -> Pure $ Right (name, a)
+    Just a -> return $ Right a
+
+
 
 findNow :: ParsedStatement -> Bool
 findNow (SelectStatement a _ _ _) = findNow' a

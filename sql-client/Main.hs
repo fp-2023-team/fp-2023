@@ -1,12 +1,6 @@
 module Main (main) where
 
-{-main :: IO ()
-main = do
-    a <- simpleHTTP (getRequest "http://localhost:5240/Note/161") >>= fmap (take 2000) . getResponseBody
-    putStrLn $ "here->" ++ a ++ "<-"
--}
 import Control.Monad.IO.Class (MonadIO (liftIO))
-
 import Data.Functor((<&>))
 import Data.List qualified as L
 import Lib1 qualified
@@ -42,7 +36,8 @@ completer n = do
   let names = [
               "select", "*", "from", "show", "table",
               "tables", "insert", "into", "values",
-              "set", "update", "delete"
+              "set", "update", "delete",
+              "create", "drop"
               ]
   return $ Prelude.filter (L.isPrefixOf n) names
 
@@ -76,4 +71,4 @@ makeHttpRequest a = do
         Left s -> Left s
         Right df -> Right $ Lib3.unconvertDF df
       Response (4, _, _) _ _ body -> return $ Left body
-      _ -> return $ Left "Unknown error"
+      Response code _ _ _-> return $ Left $ "Response code: " ++ show code
