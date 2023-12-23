@@ -257,6 +257,7 @@ parseSelect = do
                                         lift $ put xs
                                         return $ SelectStatement { selectArgs = (selectArgs b), fromArgs = [x]}
                                      | elem sym ","  -> do
+                                       lift $ put xs
                                        parsedStmt <- parseFromArgs' b
                                        return $ SelectStatement { selectArgs = (selectArgs parsedStmt), fromArgs = (x : (fromArgs parsedStmt))}
                                      | x == ""   -> throwE $ "Unexpected " ++ [sym]
