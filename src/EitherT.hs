@@ -10,13 +10,15 @@ module EitherT
     ErrorMessage,
     addTtoEither,
     fmap,
-    runEitherT
+    runEitherT,
+    removeTFromEither
   )
 where
 
 import Control.Monad.Trans.Class(lift, MonadTrans)
 import DataFrame
 import Control.Monad.Trans.State.Strict
+import Data.Tuple (fst)
 
 type ErrorMessage = String
 
@@ -65,3 +67,9 @@ addTtoEither :: Either ErrorMessage a -> EitherT ErrorMessage (State String) a
 addTtoEither (Left e) = throwE e
 addTtoEither (Right a) = pure a
 
+removeTFromEither :: EitherT ErrorMessage (State String) a -> Either ErrorMessage a
+removeTFromEither eitherTState = do
+    let something = runEitherT eitherTState -- State String (Either ErrorMessage a)
+    let somethingelse = runState something "Initial" -- (Either ErrorMessage a, String)
+    let final = fst somethingelse
+    final

@@ -70,16 +70,16 @@ main = hspec $ do
       Lib2.parseStatement "SHOW TABLE employees;" `shouldBe` addTtoEither (Right (ShowTableStatement {showTableArgs = Just "employees"}))
     it "parses a select statement with columns" $ do
       Lib2.parseStatement "SELECT id, surname FROM employees;" `shouldBe` addTtoEither (Right (SelectStatement {selectArgs = [Right (Nothing, "id"), Right (Nothing, "surname")], fromArgs = ["employees"], whereArgs = [], orderByArgs = []}))
-    --it "does not parse an invalid select statement" $ do
-      --Lib2.parseStatement "SLECT id, birthday FROM employees;" `shouldSatisfy` isLeft
+    it "does not parse an invalid select statement" $ do
+      removeTFromEither (Lib2.parseStatement "SLECT id, birthday FROM employees;") `shouldSatisfy` isLeft
     it "parses a max function" $ do
       Lib2.parseStatement "SELECT MAX(id) FROM employees;" `shouldBe` addTtoEither (Right (SelectStatement {selectArgs = [Left ([(Nothing, "id")], Func1 dummy1)], fromArgs = ["employees"], whereArgs = [], orderByArgs = []}))
-    --it "does not parse an invalid max function" $ do
-      --Lib2.parseStatement "SELECT MAaX(id) FROM employees;" `shouldSatisfy` isLeft
+    it "does not parse an invalid max function" $ do
+      removeTFromEither (Lib2.parseStatement "SELECT MAaX(id) FROM employees;") `shouldSatisfy` isLeft
     it "parses a sum function" $ do
       Lib2.parseStatement "SELECT SUM(id) FROM employees;" `shouldBe` addTtoEither (Right (SelectStatement {selectArgs = [Left ([(Nothing, "id")], Func1 dummy1)], fromArgs = ["employees"], whereArgs = [], orderByArgs = []}))
-    --it "does not parse an invalid sum function" $ do
-      --Lib2.parseStatement "SELECT SUMN(id) FROM employees;" `shouldSatisfy` isLeft
+    it "does not parse an invalid sum function" $ do
+      removeTFromEither (Lib2.parseStatement "SELECT SUMN(id) FROM employees;") `shouldSatisfy` isLeft
     it "parses a where or function with strings, = comparison" $ do
       Lib2.parseStatement "SELECT * FROM duplicates WHERE x = 'a' OR y = 'a';" `shouldBe` addTtoEither (Right (SelectStatement {selectArgs = [Right (Nothing, "*")], fromArgs = ["duplicates"], whereArgs = [(ColumnName (Nothing, "x"), Constant "a", dummy2), (ColumnName (Nothing, "y"), Constant "a", dummy2)], orderByArgs = []}))
     it "parses a where function with strings, <> comparison" $ do
@@ -142,6 +142,7 @@ main = hspec $ do
         Left err -> err `shouldBe` "should have successfully parsed"
         Right ps -> Lib2.executeStatement ps D.database `shouldBe` Right (DataFrame [Column "id" IntegerType] 
                                                                         [[IntegerValue 2]])
+  -}
   describe "Lib3.deserialize" $ do
     it "deserializes valid table" $ do
       Lib3.deserialize [r|
@@ -353,7 +354,7 @@ main = hspec $ do
           ]
         ]
       |]
-  -}
+  
   describe "Lib2.parseStatement updated (For task 3)" $ do
     {-
     it "parses select with columns from multiple tables" $ do
@@ -470,18 +471,18 @@ main = hspec $ do
         tablename = "employees",
         assignedValues = [("id", IntegerValue 5), ("name", StringValue "New Name")],
         whereArgs = []}))
---    it "error message on update without set" $ do
---      Lib2.parseStatement "UPDATE employees WHERE id=otherId;"
---      `shouldSatisfy`
---      isLeft
---    it "error message on update without table name specified" $ do
---      Lib2.parseStatement "UPDATE SET id = 5 WHERE id=otherId;"
---      `shouldSatisfy`
---      isLeft
---    it "error message on update without setting any fields" $ do
---      Lib2.parseStatement "UPDATE employees SET WHERE id=otherId;"
---      `shouldSatisfy`
---      isLeft
+    it "error message on update without set" $ do
+      removeTFromEither (Lib2.parseStatement "UPDATE employees WHERE id=otherId;")
+      `shouldSatisfy`
+      isLeft
+    it "error message on update without table name specified" $ do
+      removeTFromEither (Lib2.parseStatement "UPDATE SET id = 5 WHERE id=otherId;")
+      `shouldSatisfy`
+      isLeft
+    it "error message on update without setting any fields" $ do
+      removeTFromEither (Lib2.parseStatement "UPDATE employees SET WHERE id=otherId;")
+      `shouldSatisfy`
+      isLeft
 
 
     it "parses insert with column names provided" $ do
@@ -524,18 +525,18 @@ main = hspec $ do
         valuesOrder = Just ["name", "jobTitle"],
         values = [StringValue "Inserted Name", StringValue "Inserted Job Title"]
       }))
---    it "error message on insert when value missing" $ do
---      Lib2.parseStatement "INSERT INTO employees (name, jobTitle) VALUES;"
---      `shouldSatisfy`
---      isLeft
---    it "error message on insert when no table provided" $ do
---      Lib2.parseStatement "INSERT INTO VALUES ('Inserted Name', 'Inserted Job Title');"
---      `shouldSatisfy`
---      isLeft
---    it "error message on insert when no values provided" $ do
---      Lib2.parseStatement "INSERT INTO employees (name, jobTitle) VALUES;"
---      `shouldSatisfy`
---      isLeft
+    it "error message on insert when value missing" $ do
+      removeTFromEither (Lib2.parseStatement "INSERT INTO employees (name, jobTitle) VALUES;")
+      `shouldSatisfy`
+      isLeft
+    it "error message on insert when no table provided" $ do
+      removeTFromEither (Lib2.parseStatement "INSERT INTO VALUES ('Inserted Name', 'Inserted Job Title');")
+      `shouldSatisfy`
+      isLeft
+    it "error message on insert when no values provided" $ do
+      removeTFromEither (Lib2.parseStatement "INSERT INTO employees (name, jobTitle) VALUES;")
+      `shouldSatisfy`
+      isLeft
     it "parses delete with string constant in where" $ do
       Lib2.parseStatement "DELETE FROM employees WHERE name = 'Employee Name';"
       `shouldBe`
@@ -579,10 +580,10 @@ main = hspec $ do
         tablename = "employees",
         whereArgs = []
       }))
---    it "error message on update without table name specified" $ do
---      Lib2.parseStatement "DELETE FROM WHERE name = 'Employee Name';"
---      `shouldSatisfy`
---      isLeft
+    it "error message on update without table name specified" $ do
+      removeTFromEither (Lib2.parseStatement "DELETE FROM WHERE name = 'Employee Name';")
+      `shouldSatisfy`
+      isLeft
   
   describe "Lib3.executeSql" $ do
     {-
@@ -674,6 +675,8 @@ main = hspec $ do
         tablename = "employees",
         whereArgs = []
       }))
+    it "does not parse an invalid select statement" $ do
+      removeTFromEither (Lib2.parseStatement "SLECT id, birthday FROM employees;") `shouldSatisfy` isLeft
 
 type MemoryDatabase = IORef [(String, String)]
 
