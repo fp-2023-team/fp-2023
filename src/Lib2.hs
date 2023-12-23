@@ -383,7 +383,6 @@ parseWhereArgs = do
                               | otherwise -> do
                                 lift $ put xs1
                                 return $ [(a, Constant x1, func)]
-                                --throwE $ "Unrecognised statement: " ++ x1
               (x2, '\'', xs2) | parseCompare x2 "or" -> if (xs2 /= "")
                                 then do
                                   lift $ put $ '\'':xs2 
@@ -393,7 +392,6 @@ parseWhereArgs = do
                               | otherwise -> do
                                 lift $ put $ xs1
                                 return $ [(a, Constant x1, func)]
-                                --throwE $ "Unrecognised statement: " ++ x1
               (x2, sym, _) -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ x2
           | otherwise -> throwE $ "Unexpected \' after " ++ x  
         (x, ';', xs) | x /= "" ->  do
@@ -413,7 +411,7 @@ parseWhereArgs = do
                 return $ (a, ColumnName fullName, func) : parseRes
               else throwE $ "Missing statement after " ++ x1 
             else do
-              fullName <- addTtoEither $ parseFullCollumnName x--throwE $ "Unrecognised statement: " ++ x1
+              fullName <- addTtoEither $ parseFullCollumnName x
               lift $ put xs
               return $ [(a, ColumnName fullName, func)]
         (x, sym, _) -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ x
