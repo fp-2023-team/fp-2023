@@ -380,14 +380,20 @@ parseWhereArgs = do
                                   parseRes <- parseWhereArgs'
                                   return $ (a, Constant x1, func) : parseRes
                                 else throwE $ "Missing statement after " ++ x2
-                              | otherwise -> throwE $ "Unrecognised statement: " ++ x1
+                              | otherwise -> do
+                                lift $ put xs1
+                                return $ [(a, Constant x1, func)]
+                                --throwE $ "Unrecognised statement: " ++ x1
               (x2, '\'', xs2) | parseCompare x2 "or" -> if (xs2 /= "")
                                 then do
                                   lift $ put $ '\'':xs2 
                                   parseRes <- parseWhereArgs'
                                   return $ (a, Constant x1, func) : parseRes
                                 else throwE $ "Missing statement after " ++ x2
-                              | otherwise -> throwE $ "Unrecognised statement: " ++ x1
+                              | otherwise -> do
+                                lift $ put $ xs1
+                                return $ [(a, Constant x1, func)]
+                                --throwE $ "Unrecognised statement: " ++ x1
               (x2, sym, _) -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ x2
           | otherwise -> throwE $ "Unexpected \' after " ++ x  
         (x, ';', xs) | x /= "" ->  do
@@ -396,6 +402,7 @@ parseWhereArgs = do
                       return $ [(a, ColumnName fullName, func)]
                     | otherwise -> throwE "Missing second operand"
         (x, ' ', xs) -> do
+          lift $ put xs
           x1 <- parseKeyword
           xs1 <- lift get
           if (parseCompare x1 "or")
@@ -405,7 +412,10 @@ parseWhereArgs = do
                 fullName <- addTtoEither $ parseFullCollumnName x
                 return $ (a, ColumnName fullName, func) : parseRes
               else throwE $ "Missing statement after " ++ x1 
-            else throwE $ "Unrecognised statement: " ++ x1
+            else do
+              fullName <- addTtoEither $ parseFullCollumnName x--throwE $ "Unrecognised statement: " ++ x1
+              lift $ put xs
+              return $ [(a, ColumnName fullName, func)]
         (x, sym, _) -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ x
 
 parseInsert :: EitherT ErrorMessage (State String) ParsedStatement
@@ -457,7 +467,7 @@ parseUpdate = do
         ' ' -> do
           parseRes <- parseWhereArgs
           leftover <- lift get
-          _ <- if (parseRes == [] && leftover /= "") then throwE "Unrecognised keyword at the end of the statement" else return Nothing
+          _ <- if (leftover /= "") then throwE "Unrecognised keyword at the end of the statement" else return Nothing
           return $ UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues, whereArgs = parseRes}
         ';' -> return $ UpdateStatement {tablename = parsedTablename, assignedValues = newAssignedValues, whereArgs = []}
         otherwise -> throwE $ "Unexpected " ++ [termChar] ++ " after values assignment"
@@ -540,7 +550,7 @@ parseDelete = do
         ' ' -> do
           parsedWhereArgs <- parseWhereArgs
           leftover <- lift get
-          _ <- if (parsedWhereArgs == [] && leftover /= "") then throwE "Unrecognised keyword at the end of the statement" else return Nothing
+          _ <- if (leftover /= "") then throwE "Unrecognised keyword at the end of the statement" else return Nothing
           return $ DeleteStatement {tablename = parsedTablename, whereArgs = parsedWhereArgs}
         ';' -> return $ DeleteStatement {tablename = parsedTablename, whereArgs = []}
         otherwise -> throwE $ "Unexpected " ++ [sym] ++ " after " ++ parsedTablename
