@@ -60,8 +60,12 @@ handleRequest state = do
     statementStr <- look "statement"
     executionResult <- lift $ runExecuteIO $ Lib3.executeSql statementStr
     case executionResult of
-        Left err -> badRequest err
-        Right dataframe -> ok $ ByteString.Internal.unpackChars $ Yaml.encode $ convertDF dataframe
+        Left err -> do
+            _ <- lift $ putStrLn $ "Error: " ++ err
+            badRequest err
+        Right dataframe -> do
+            _ <- lift $ putStrLn $ "Info: successfully parsed '" ++ statementStr ++ "'"
+            ok $ ByteString.Internal.unpackChars $ Yaml.encode $ convertDF dataframe
     where
         runExecuteIO :: Lib3.Execution r -> IO r
         runExecuteIO (Pure r) = return r
