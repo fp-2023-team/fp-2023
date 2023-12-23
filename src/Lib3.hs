@@ -57,7 +57,6 @@ getTableList = liftF $ GetTableList id
 
 deleteTable :: TableName -> Execution ()
 deleteTable name = liftF $ DeleteTable name id
-
 executeSql :: String -> Execution (Either ErrorMessage DataFrame)
 executeSql sql = do
   parsed <- Pure $ parseStatement sql

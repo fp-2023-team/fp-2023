@@ -86,6 +86,7 @@ failedSave _ = do
   putStrLn "Error: failed to save!"
   return ()
 
+
 failedDelete :: String -> SomeException -> IO ()
 failedDelete tableName _ = do
   putStrLn $ "Error: failed to delete table '" ++ tableName ++ "'!"

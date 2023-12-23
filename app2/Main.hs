@@ -13,6 +13,7 @@ import System.Console.Repline
     evalRepl,
   )
 import System.Console.Terminal.Size (Window, size, width)
+import EitherT
 
 type Repl a = HaskelineT IO a
 
@@ -41,7 +42,7 @@ cmd c = do
     terminalWidth = maybe 80 width
     cmd' :: Integer -> Either String String
     cmd' s = do
-      stmt <- Lib2.parseStatement c
+      stmt <- removeTFromEither (Lib2.parseStatement c)
       df <- Lib2.executeStatement stmt database
       _ <- Lib1.validateDataFrame df
       return $ Lib1.renderDataFrameAsTable s df
